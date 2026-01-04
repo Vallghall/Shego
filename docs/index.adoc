@@ -1,0 +1,87 @@
+= Schego: A Scheme Interpreter in Go
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+== Overview
+
+Schego is a Scheme interpreter written in Go that can be used as:
+
+* A drop-in library dependency for embedding Scheme in Go applications
+* A command-line interpreter for running Scheme files
+* An interactive REPL with a TUI interface (using tview)
+
+== Project Structure
+
+[source]
+----
+schego/
+├── cmd/
+│   ├── schego/           # CLI interpreter executable
+│   └── schego-repl/      # REPL with tview TUI
+├── pkg/                  # Library packages (public API)
+├── test/                 # Integration tests
+├── docs/                 # Documentation (AsciiDoc)
+├── go.mod
+└── Makefile
+----
+
+== Getting Started
+
+=== Building
+
+[source,bash]
+----
+# Build both executables
+make build
+
+# Build only CLI
+make build-cli
+
+# Build only REPL
+make build-repl
+----
+
+=== Running
+
+[source,bash]
+----
+# Run CLI interpreter
+./bin/schego example.scm
+
+# Run REPL
+./bin/schego-repl
+----
+
+== Usage
+
+=== As a Library
+
+[source,go]
+----
+import "github.com/Vallghall/schego/pkg/schego"
+
+// TODO: Add library usage examples
+----
+
+=== Command Line
+
+[source,bash]
+----
+schego <file.scm>
+----
+
+=== REPL
+
+Launch the interactive REPL:
+
+[source,bash]
+----
+schego-repl
+----
+
+== License
+
+// TODO: Add license information
+
