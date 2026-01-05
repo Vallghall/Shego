@@ -68,8 +68,8 @@ func (l *lexer) Tokenize(input string) ([]Token, error) {
 	r := NewReader(input, l.file)
 
 	for !r.EOF() {
-		// Skip whitespace
-		r.SkipWhitespace()
+		// Skip whitespace and comments
+		l.skipWhitespaceAndComments(r)
 		if r.EOF() {
 			break
 		}
@@ -106,4 +106,29 @@ func (l *lexer) Tokenize(input string) ([]Token, error) {
 	}
 
 	return tokens, nil
+}
+
+// skipWhitespaceAndComments skips whitespace and semicolon-style comments.
+func (l *lexer) skipWhitespaceAndComments(r Reader) {
+	for !r.EOF() {
+		r.SkipWhitespace()
+		if r.EOF() {
+			return
+		}
+
+		// Check for comment
+		if r.Current() == ';' {
+			// Skip until end of line
+			for !r.EOF() && r.Current() != '\n' {
+				r.Advance(1)
+			}
+			// Skip the newline if present
+			if !r.EOF() && r.Current() == '\n' {
+				r.Advance(1)
+			}
+		} else {
+			// Not a comment, done skipping
+			return
+		}
+	}
 }

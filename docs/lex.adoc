@@ -10,6 +10,23 @@ The `lex` package is responsible for lexical analysis (tokenization) of Scheme s
 
 The package uses the **Chain of Responsibility** design pattern to organize token parsing, making it easy to extend with new token types.
 
+== Comments and Whitespace
+
+The lexer automatically handles:
+
+* **Whitespace**: Spaces, tabs, newlines are skipped between tokens
+* **Comments**: Semicolon-style comments (`;` to end of line) are ignored
+
+[source,scheme]
+----
+; This is a comment
+(define x 42) ; inline comment
+; Another comment
+(+ x 1)
+----
+
+Comments are stripped during tokenization and do not appear in the token stream.
+
 == Package Structure
 
 [source]
