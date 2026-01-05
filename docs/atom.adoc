@@ -1,0 +1,244 @@
+= Atom Package (pkg/atom)
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+== Overview
+
+The `atom` package provides an **atom interning pool** for efficient storage and comparison of symbols/identifiers. Instead of storing full strings throughout the interpreter, atoms are interned once and referenced by compact `uint64` IDs.
+
+This optimization provides:
+
+* **Memory efficiency**: Each unique atom string is stored only once
+* **Fast equality**: Comparing two atoms is a simple integer comparison (`O(1)`)
+* **Cache-friendly**: IDs are small and fit in registers
+
+== Package Structure
+
+[source]
+----
+pkg/atom/
+└── pool.go    # Pool type and global functions
+----
+
+== Core Types
+
+=== ID
+
+[source,go]
+----
+type ID uint64
+----
+
+A unique identifier for an interned atom. IDs are assigned sequentially starting from 0.
+
+=== Pool
+
+[source,go]
+----
+type Pool struct {
+    // internal fields
+}
+----
+
+A thread-safe atom interning pool. Once an atom is added, it remains in the pool for the program's lifetime.
+
+== Pool Operations
+
+=== Creating a Pool
+
+[source,go]
+----
+pool := atom.NewPool()
+----
+
+Creates a new empty atom pool. Pre-allocates space for 256 atoms.
+
+=== Interning Atoms
+
+[source,go]
+----
+id := pool.Intern("define")
+----
+
+Adds an atom to the pool if not present, returns its ID. If the atom already exists, returns the existing ID. This is the primary operation for adding atoms.
+
+**Thread-safe**: Uses read-write locking with fast-path optimization for existing atoms.
+
+=== Looking Up IDs
+
+[source,go]
+----
+id, ok := pool.Lookup("lambda")
+if ok {
+    // atom exists
+}
+----
+
+Returns the ID for an atom if it exists, without adding it.
+
+=== Resolving IDs to Strings
+
+[source,go]
+----
+// Safe version
+s, ok := pool.Resolve(id)
+if ok {
+    fmt.Println(s)
+}
+
+// Panicking version (for when ID is known valid)
+s := pool.MustResolve(id)
+----
+
+Converts an ID back to its string representation.
+
+=== Utility Methods
+
+[source,go]
+----
+pool.Size()       // Number of atoms in pool
+pool.Contains(s)  // Check if atom exists
+pool.All()        // Get all atoms (copy)
+----
+
+== Global Pool
+
+For convenience, a global pool is provided:
+
+[source,go]
+----
+// Using global pool
+id := atom.Intern("foo")
+s := atom.MustResolve(id)
+----
+
+The global pool is accessed via package-level functions that delegate to `atom.Global`.
+
+== Thread Safety
+
+The `Pool` is fully thread-safe:
+
+* Multiple goroutines can intern and resolve atoms concurrently
+* Uses `sync.RWMutex` for efficient concurrent reads
+* Write operations use double-checked locking pattern
+
+== Usage Example
+
+[source,go]
+----
+package main
+
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/atom"
+)
+
+func main() {
+    pool := atom.NewPool()
+
+    // Intern some atoms
+    idDefine := pool.Intern("define")
+    idLambda := pool.Intern("lambda")
+    idDefine2 := pool.Intern("define") // Same ID as first
+
+    fmt.Printf("define: %d\n", idDefine)   // 0
+    fmt.Printf("lambda: %d\n", idLambda)   // 1
+    fmt.Printf("define again: %d\n", idDefine2) // 0 (same)
+
+    // Fast comparison
+    if idDefine == idDefine2 {
+        fmt.Println("Same atom!")
+    }
+
+    // Resolve back to string
+    name := pool.MustResolve(idDefine)
+    fmt.Println(name) // "define"
+
+    fmt.Printf("Pool size: %d\n", pool.Size()) // 2
+}
+----
+
+== Integration with AST
+
+The atom pool is designed to work with the AST package. Symbols can store atom IDs instead of strings:
+
+[source,go]
+----
+// Before (storing strings)
+type SymbolNode struct {
+    Name string  // Full string stored
+}
+
+// After (storing atom IDs)
+type SymbolNode struct {
+    NameID atom.ID  // Just an ID
+    pool   *atom.Pool
+}
+
+func (s *SymbolNode) Name() string {
+    return s.pool.MustResolve(s.NameID)
+}
+----
+
+This approach:
+
+* Reduces memory for duplicate symbols
+* Makes symbol comparison instant
+* Centralizes string storage
+
+== Performance Characteristics
+
+[cols="2,1,3"]
+|===
+| Operation | Complexity | Notes
+
+| `Intern` (new atom)
+| O(1) amortized
+| Map insertion + slice append
+
+| `Intern` (existing)
+| O(1)
+| Fast path with read lock only
+
+| `Lookup`
+| O(1)
+| Map lookup with read lock
+
+| `Resolve`
+| O(1)
+| Array index access
+
+| `Contains`
+| O(1)
+| Delegates to `Lookup`
+
+| Memory per atom
+| ~48 bytes + string
+| Map entry + slice slot + string data
+|===
+
+== Design Decisions
+
+=== Why uint64?
+
+* Large enough for any practical program (18 quintillion atoms)
+* Efficient on 64-bit architectures
+* Simple equality comparison
+
+=== Why Lifetime Persistence?
+
+Atoms are never removed because:
+
+* Scheme symbols are typically long-lived
+* Removal would require reference counting or GC
+* Most programs use a bounded set of symbols
+* Simplicity and performance over complexity
+
+=== Why Global Pool Option?
+
+* Convenience for simple use cases
+* Single interpreter scenarios
+* Can be ignored in favor of explicit pools for isolation
+

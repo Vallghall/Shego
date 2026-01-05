@@ -1,0 +1,377 @@
+= AST Package (pkg/ast)
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+== Overview
+
+The `ast` package is responsible for parsing tokens into an Abstract Syntax Tree (AST). It transforms the flat token sequence from the lexer into a hierarchical tree structure representing the program's structure.
+
+Like the lexer, the parser uses the **Chain of Responsibility** design pattern for extensibility.
+
+== Package Structure
+
+[source]
+----
+pkg/ast/
+├── ast.go           # AST node type definitions
+├── cor.go           # Chain of Responsibility and TokenReader
+├── parser.go        # Parser interface and implementation
+├── node_special.go  # Special forms handler (if, define, lambda, etc.)
+├── node_list.go     # S-expression/list handler
+└── node_atom.go     # Atomic value handler (numbers, strings, symbols)
+----
+
+== AST Node Types
+
+All AST nodes implement the `Node` interface (`ast.go`):
+
+[source,go]
+----
+type Node interface {
+    node()            // marker method for type safety
+    Token() lex.Token // source token for error reporting
+}
+----
+
+=== Atomic Nodes (Self-Evaluating)
+
+[cols="1,2,2"]
+|===
+| Type | Description | Scheme Example
+
+| `NumberNode`
+| Numeric literal
+| `42`, `-3.14`
+
+| `StringNode`
+| String literal (quotes stripped)
+| `"hello"`
+
+| `SymbolNode`
+| Identifier or operator
+| `foo`, `+`, `null?`
+|===
+
+=== Compound Nodes
+
+[cols="1,2,2"]
+|===
+| Type | Description | Scheme Example
+
+| `ListNode`
+| Raw list (empty lists only)
+| `()`
+
+| `CallNode`
+| Function/procedure call
+| `(+ 1 2)`, `(display "hi")`
+|===
+
+=== Special Form Nodes
+
+[cols="1,2,2"]
+|===
+| Type | Description | Scheme Example
+
+| `IfNode`
+| Conditional expression
+| `(if cond then else)`
+
+| `BeginNode`
+| Sequential expressions
+| `(begin e1 e2 ...)`
+
+| `DefineNode`
+| Variable or function definition
+| `(define x 1)`, `(define (f x) body)`
+
+| `LambdaNode`
+| Anonymous function
+| `(lambda (x y) body)`
+
+| `LetNode`
+| Local bindings
+| `(let ((x 1) (y 2)) body)`
+
+| `CondNode`
+| Multi-way conditional
+| `(cond (t1 e1) (else e2))`
+
+| `QuoteNode`
+| Quoted expression
+| `(quote x)`, `'x`
+|===
+
+== Token Reader
+
+The `TokenReader` interface (`cor.go`) provides token stream navigation:
+
+[source,go]
+----
+type TokenReader interface {
+    EOF() bool
+    Current() lex.Token
+    Peek(offset int) lex.Token
+    Advance()
+    Position() int
+}
+----
+
+== Chain of Responsibility
+
+=== ParseNode Interface
+
+[source,go]
+----
+type ParseNode interface {
+    Handle(r TokenReader) (node Node, handled bool)
+    SetNext(ParseNode)
+    Next() ParseNode
+}
+----
+
+=== Chain Order
+
+[source]
+----
+SpecialFormsNode → ListParseNode → AtomParseNode
+       │                │               │
+       ▼                ▼               ▼
+  (if ...)          (...)          42, "s", x
+  (define ...)      function
+  (lambda ...)      calls
+----
+
+=== Handler Implementations
+
+==== SpecialFormsNode (`node_special.go`)
+
+**First in chain.** Handles special form expressions by:
+
+1. Checking if current token is `(`
+2. Peeking at next token to see if it's a special keyword
+3. If yes: parses the entire special form
+4. If no: passes to `ListParseNode`
+
+Supported special forms:
+
+[cols="1,3"]
+|===
+| Keyword | Syntax
+
+| `if`
+| `(if condition then [else])`
+
+| `begin`
+| `(begin expr ...)`
+
+| `define`
+| `(define name value)` or `(define (name params) body)`
+
+| `lambda`
+| `(lambda (params) body)`
+
+| `let`
+| `(let ((name value) ...) body)`
+
+| `cond`
+| `(cond (test expr) ... [(else expr)])`
+
+| `quote`
+| `(quote expr)`
+|===
+
+The special keywords are defined in a map for easy extension:
+
+[source,go]
+----
+var specialKeywords = map[string]bool{
+    "if": true, "begin": true, "define": true,
+    "lambda": true, "let": true, "cond": true, "quote": true,
+}
+----
+
+==== ListParseNode (`node_list.go`)
+
+Handles regular S-expressions (non-special forms):
+
+1. Matches opening `(`
+2. Recursively parses all elements using the full chain
+3. On closing `)`:
+   * Empty list → `ListNode`
+   * Non-empty list → `CallNode` (first element = operator, rest = args)
+
+==== AtomParseNode (`node_atom.go`)
+
+**Last in chain.** Handles atomic tokens:
+
+* `lex.Number` → `NumberNode`
+* `lex.String` → `StringNode`
+* `lex.Atom` → `SymbolNode`
+
+== Parser Interface
+
+The main entry point (`parser.go`):
+
+[source,go]
+----
+type Parser interface {
+    Parse(tokens []lex.Token) ([]Node, error)
+}
+
+parser := ast.New()
+nodes, err := parser.Parse(tokens)
+----
+
+=== Error Handling
+
+[source,go]
+----
+type ParseError struct {
+    Message string
+    Token   lex.Token
+}
+----
+
+== AST Structure Examples
+
+=== Simple Call
+
+[source,scheme]
+----
+(+ 1 2)
+----
+
+[source]
+----
+CallNode
+├── Operator: SymbolNode{Name: "+"}
+└── Args:
+    ├── NumberNode{Value: "1"}
+    └── NumberNode{Value: "2"}
+----
+
+=== Function Definition
+
+[source,scheme]
+----
+(define (square x) (* x x))
+----
+
+[source]
+----
+DefineNode
+├── Name: SymbolNode{Name: "square"}
+├── Params: [SymbolNode{Name: "x"}]
+└── Body:
+    └── CallNode
+        ├── Operator: SymbolNode{Name: "*"}
+        └── Args:
+            ├── SymbolNode{Name: "x"}
+            └── SymbolNode{Name: "x"}
+----
+
+=== Conditional
+
+[source,scheme]
+----
+(if (> x 0) "positive" "non-positive")
+----
+
+[source]
+----
+IfNode
+├── Condition: CallNode{Operator: ">", Args: [x, 0]}
+├── Then: StringNode{Value: "positive"}
+└── Else: StringNode{Value: "non-positive"}
+----
+
+=== Let Expression
+
+[source,scheme]
+----
+(let ((x 1) (y 2)) (+ x y))
+----
+
+[source]
+----
+LetNode
+├── Bindings:
+│   ├── {Name: "x", Value: NumberNode{1}}
+│   └── {Name: "y", Value: NumberNode{2}}
+└── Body:
+    └── CallNode{Operator: "+", Args: [x, y]}
+----
+
+== Usage Example
+
+[source,go]
+----
+package main
+
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/ast"
+    "github.com/Vallghall/schego/pkg/lex"
+)
+
+func main() {
+    // Tokenize
+    lexer := lex.New()
+    tokens, _ := lexer.Tokenize(`(define (fact n)
+        (if (= n 0)
+            1
+            (* n (fact (- n 1)))))`)
+    
+    // Parse
+    parser := ast.New()
+    nodes, err := parser.Parse(tokens)
+    if err != nil {
+        panic(err)
+    }
+    
+    // nodes[0] is a DefineNode for the factorial function
+    def := nodes[0].(*ast.DefineNode)
+    fmt.Printf("Defined function: %s\n", def.Name.Name)
+    fmt.Printf("Parameters: %d\n", len(def.Params))
+}
+----
+
+== Extending the Parser
+
+=== Adding a New Special Form
+
+1. Add the keyword to `specialKeywords` map in `node_special.go`
+2. Add a case in `transform()` method
+3. Implement the parsing function (e.g., `parseNewForm()`)
+
+Example for adding `when`:
+
+[source,go]
+----
+// In specialKeywords map:
+"when": true,
+
+// In transform():
+case "when":
+    return s.parseWhen(openParen, elements)
+
+// New parsing function:
+func (s *SpecialFormsNode) parseWhen(tok lex.Token, elements []Node) (Node, bool) {
+    // (when condition body...)
+    if len(elements) < 2 {
+        return nil, false
+    }
+    // Create appropriate AST node...
+}
+----
+
+=== Adding a New AST Node Type
+
+1. Define the struct in `ast.go` with embedded `baseNode`
+2. Implement the `node()` marker method
+3. Create a constructor function (`NewXxxNode`)
+4. Update the parser to create the new node type
+

@@ -17,29 +17,30 @@ func NewAtomNode() *AtomNode {
 }
 
 // Handle parses an atom token.
-func (a *AtomNode) Handle(input string, pos int, line int, linePos int, file string) (Token, int, bool) {
-	if pos >= len(input) {
-		return nil, 0, false
+func (a *AtomNode) Handle(r Reader) (Token, bool) {
+	if r.EOF() {
+		return nil, false
 	}
 
-	ch := input[pos]
+	ch := r.Current()
 
 	// Skip if it's whitespace or a delimiter that shouldn't be an atom
 	if isWhitespace(ch) {
-		return nil, 0, false
+		return nil, false
 	}
 
 	// Reserved characters that are not valid atom starters
 	if ch == '(' || ch == ')' || ch == '"' {
-		return nil, 0, false
+		return nil, false
 	}
+
+	file, pos, line, linePos := r.Snapshot()
 
 	// Parse the atom
 	var sb strings.Builder
-	i := pos
 
-	for i < len(input) {
-		ch := input[i]
+	for !r.EOF() {
+		ch := r.Current()
 
 		// Stop at whitespace or delimiters
 		if isWhitespace(ch) || isDelimiter(ch) {
@@ -47,15 +48,15 @@ func (a *AtomNode) Handle(input string, pos int, line int, linePos int, file str
 		}
 
 		sb.WriteByte(ch)
-		i++
+		r.Advance(1)
 	}
 
 	raw := sb.String()
 	if raw == "" {
-		return nil, 0, false
+		return nil, false
 	}
 
-	return NewToken(file, pos, line, linePos, raw, Atom), i - pos, true
+	return NewToken(file, pos, line, linePos, raw, Atom), true
 }
 
 func isWhitespace(ch byte) bool {

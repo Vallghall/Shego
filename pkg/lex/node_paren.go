@@ -11,18 +11,22 @@ func NewParenNode() *ParenNode {
 }
 
 // Handle checks if the current character is a parenthesis and returns the appropriate token.
-func (p *ParenNode) Handle(input string, pos int, line int, linePos int, file string) (Token, int, bool) {
-	if pos >= len(input) {
-		return nil, 0, false
+func (p *ParenNode) Handle(r Reader) (Token, bool) {
+	if r.EOF() {
+		return nil, false
 	}
 
-	ch := input[pos]
+	file, pos, line, linePos := r.Snapshot()
+	ch := r.Current()
+
 	switch ch {
 	case '(':
-		return NewToken(file, pos, line, linePos, "(", ParenOpen), 1, true
+		r.Advance(1)
+		return NewToken(file, pos, line, linePos, "(", ParenOpen), true
 	case ')':
-		return NewToken(file, pos, line, linePos, ")", ParenClose), 1, true
+		r.Advance(1)
+		return NewToken(file, pos, line, linePos, ")", ParenClose), true
 	default:
-		return p.PassToNext(input, pos, line, linePos, file)
+		return p.PassToNext(r)
 	}
 }

@@ -19,23 +19,26 @@ func NewStringNode() *StringNode {
 }
 
 // Handle checks if the current character starts a string literal and parses it.
-func (s *StringNode) Handle(input string, pos int, line int, linePos int, file string) (Token, int, bool) {
-	if pos >= len(input) {
-		return nil, 0, false
+func (s *StringNode) Handle(r Reader) (Token, bool) {
+	if r.EOF() {
+		return nil, false
 	}
 
-	if input[pos] != '"' {
-		return s.PassToNext(input, pos, line, linePos, file)
+	if r.Current() != '"' {
+		return s.PassToNext(r)
 	}
+
+	file, pos, line, linePos := r.Snapshot()
 
 	// Parse the string literal
 	var sb strings.Builder
 	sb.WriteByte('"')
-	i := pos + 1
+	r.Advance(1) // Skip opening quote
+
 	escaped := false
 
-	for i < len(input) {
-		ch := input[i]
+	for !r.EOF() {
+		ch := r.Current()
 
 		if escaped {
 			// Handle escape sequences
@@ -56,32 +59,32 @@ func (s *StringNode) Handle(input string, pos int, line int, linePos int, file s
 				sb.WriteByte(ch)
 			}
 			escaped = false
-			i++
+			r.Advance(1)
 			continue
 		}
 
 		if ch == '\\' {
 			escaped = true
-			i++
+			r.Advance(1)
 			continue
 		}
 
 		if ch == '"' {
 			sb.WriteByte('"')
-			i++
+			r.Advance(1)
 			// Successfully closed the string
-			return NewToken(file, pos, line, linePos, sb.String(), String), i - pos, true
+			return NewToken(file, pos, line, linePos, sb.String(), String), true
 		}
 
 		// Don't allow unescaped newlines in strings
 		if ch == '\n' {
-			return nil, 0, false // Will be handled as error by lexer
+			return nil, false // Will be handled as error by lexer
 		}
 
 		sb.WriteByte(ch)
-		i++
+		r.Advance(1)
 	}
 
 	// Reached end of input without closing quote
-	return nil, 0, false
+	return nil, false
 }

@@ -1,0 +1,279 @@
+= Lexer Package (pkg/lex)
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+== Overview
+
+The `lex` package is responsible for lexical analysis (tokenization) of Scheme source code. It converts a raw input string into a sequence of tokens that can be processed by the parser.
+
+The package uses the **Chain of Responsibility** design pattern to organize token parsing, making it easy to extend with new token types.
+
+== Package Structure
+
+[source]
+----
+pkg/lex/
+├── tokens.go        # Token interface and TKind enum
+├── input_reader.go  # Reader interface for input handling
+├── cor.go           # Chain of Responsibility Node interface
+├── lex.go           # Lexer interface and implementation
+├── node_paren.go    # Parentheses token handler
+├── node_string.go   # String literal handler
+├── node_number.go   # Numeric literal handler
+└── node_atom.go     # Symbol/identifier handler
+----
+
+== Token Types
+
+The lexer recognizes five token kinds, defined in `tokens.go`:
+
+[cols="1,2,2"]
+|===
+| TKind | Description | Examples
+
+| `ParenOpen`
+| Opening parenthesis
+| `(`
+
+| `ParenClose`
+| Closing parenthesis
+| `)`
+
+| `String`
+| Quoted string literal
+| `"hello"`, `"with spaces"`
+
+| `Number`
+| Numeric literal (integer or decimal)
+| `42`, `-3`, `3.14`, `+5`
+
+| `Atom`
+| Symbol, identifier, or operator
+| `foo`, `define`, `+`, `-`, `null?`
+|===
+
+=== Token Interface
+
+Every token implements the `Token` interface:
+
+[source,go]
+----
+type Token interface {
+    File() string      // source file name
+    Position() int     // absolute position in input
+    Line() int         // 1-based line number
+    LinePosition() int // 1-based column within line
+    Raw() string       // original string the token was parsed from
+    Kind() TKind       // token type
+}
+----
+
+== Input Reader
+
+The `Reader` interface (`input_reader.go`) encapsulates input traversal and position tracking:
+
+[source,go]
+----
+type Reader interface {
+    // Position information
+    File() string
+    Position() int
+    Line() int
+    LinePosition() int
+
+    // Reading operations
+    EOF() bool
+    Current() byte
+    Peek(offset int) (byte, bool)
+    PeekString(length int) (string, bool)
+
+    // Movement
+    Advance(n int)
+    SkipWhitespace() bool
+
+    // Snapshot for token creation
+    Snapshot() (file string, pos int, line int, linePos int)
+}
+----
+
+The Reader automatically tracks line and column positions as it advances through the input.
+
+== Chain of Responsibility
+
+=== Node Interface
+
+Each token type is handled by a `Node` in the chain (`cor.go`):
+
+[source,go]
+----
+type Node interface {
+    Handle(r Reader) (token Token, handled bool)
+    SetNext(Node)
+    Next() Node
+}
+----
+
+The `BaseNode` struct provides common chain traversal logic, including the `PassToNext()` method for delegating to the next handler.
+
+=== Chain Order
+
+The lexer processes tokens in this order:
+
+[source]
+----
+ParenNode → StringNode → NumberNode → AtomNode
+    │            │            │           │
+    ▼            ▼            ▼           ▼
+  ( )         "..."        digits      symbols
+----
+
+Each node:
+
+1. Checks if the current input matches its token type
+2. If yes: creates a token, advances the reader, returns `(token, true)`
+3. If no: calls `PassToNext()` to delegate to the next node
+
+=== Handler Implementations
+
+==== ParenNode (`node_paren.go`)
+
+Handles `(` and `)` characters. Simple single-character matching.
+
+==== StringNode (`node_string.go`)
+
+Handles quoted strings starting with `"`. Features:
+
+* Reads until closing `"`
+* Supports escape sequences: `\n`, `\t`, `\r`, `\\`, `\"`
+* Rejects unescaped newlines in strings
+
+==== NumberNode (`node_number.go`)
+
+Handles numeric literals. Features:
+
+* Integer and decimal numbers
+* **Sign lookahead**: `+` or `-` followed by a digit is parsed as a signed number
+* **Operator detection**: `+` or `-` followed by whitespace/delimiter passes to AtomNode
+
+[source,scheme]
+----
+42      ; Number
+-3      ; Number (negative)
++5      ; Number (positive)
++       ; Atom (operator) - no digit follows
+-       ; Atom (operator) - no digit follows
+----
+
+==== AtomNode (`node_atom.go`)
+
+Handles symbols, identifiers, and operators. This is the **fallback handler** - it accepts any sequence of non-whitespace, non-delimiter characters.
+
+Delimiters that terminate an atom: `(`, `)`, `"`, `'`, `` ` ``, `,`
+
+== Lexer Interface
+
+The main entry point is the `Lexer` interface (`lex.go`):
+
+[source,go]
+----
+type Lexer interface {
+    Tokenize(input string) ([]Token, error)
+}
+
+// Create with optional file name for error messages
+lexer := lex.New()
+lexer := lex.New(lex.WithFile("example.scm"))
+----
+
+=== Error Handling
+
+The lexer returns `LexError` for invalid input:
+
+[source,go]
+----
+type LexError struct {
+    Message  string
+    Position int
+    Line     int
+    LinePos  int
+    File     string
+}
+----
+
+Common errors:
+
+* Unclosed string literal
+* Unexpected character
+
+== Usage Example
+
+[source,go]
+----
+package main
+
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/lex"
+)
+
+func main() {
+    lexer := lex.New(lex.WithFile("example.scm"))
+    
+    tokens, err := lexer.Tokenize(`(define (square x) (* x x))`)
+    if err != nil {
+        panic(err)
+    }
+    
+    for _, tok := range tokens {
+        fmt.Printf("%s: %q at %d:%d\n", 
+            tok.Kind(), tok.Raw(), tok.Line(), tok.LinePosition())
+    }
+}
+----
+
+Output:
+[source]
+----
+ParenOpen: "(" at 1:1
+Atom: "define" at 1:2
+ParenOpen: "(" at 1:9
+Atom: "square" at 1:10
+Atom: "x" at 1:17
+ParenClose: ")" at 1:18
+ParenOpen: "(" at 1:20
+Atom: "*" at 1:21
+Atom: "x" at 1:23
+Atom: "x" at 1:25
+ParenClose: ")" at 1:26
+ParenClose: ")" at 1:27
+----
+
+== Extending the Lexer
+
+To add a new token type:
+
+1. Add a new `TKind` constant in `tokens.go`
+2. Create a new node file (e.g., `node_comment.go`)
+3. Implement the `Node` interface
+4. Add the node to the chain in `lex.go` at the appropriate position
+
+Example for adding comment support:
+
+[source,go]
+----
+// node_comment.go
+type CommentNode struct {
+    BaseNode
+}
+
+func (c *CommentNode) Handle(r Reader) (Token, bool) {
+    if r.EOF() || r.Current() != ';' {
+        return c.PassToNext(r)
+    }
+    // Skip to end of line...
+    return nil, true // Comments produce no token
+}
+----
+

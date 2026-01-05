@@ -17,83 +17,91 @@ func NewNumberNode() *NumberNode {
 }
 
 // Handle checks if the current position starts a number and parses it.
-func (n *NumberNode) Handle(input string, pos int, line int, linePos int, file string) (Token, int, bool) {
-	if pos >= len(input) {
-		return nil, 0, false
+func (n *NumberNode) Handle(r Reader) (Token, bool) {
+	if r.EOF() {
+		return nil, false
 	}
 
-	ch := input[pos]
+	ch := r.Current()
 
 	// Check for sign prefix
 	hasSign := ch == '+' || ch == '-'
 	if hasSign {
 		// Look ahead to see if this is a signed number or a standalone operator
-		if pos+1 >= len(input) {
+		nextCh, ok := r.Peek(1)
+		if !ok {
 			// End of input, pass to atom handler
-			return n.PassToNext(input, pos, line, linePos, file)
+			return n.PassToNext(r)
 		}
 
-		nextCh := input[pos+1]
 		if !isDigit(nextCh) && nextCh != '.' {
 			// Not followed by digit or decimal point, pass to atom handler
-			return n.PassToNext(input, pos, line, linePos, file)
+			return n.PassToNext(r)
 		}
 	} else if !isDigit(ch) && ch != '.' {
 		// Doesn't start with digit, sign, or decimal point
-		return n.PassToNext(input, pos, line, linePos, file)
+		return n.PassToNext(r)
 	}
+
+	file, pos, line, linePos := r.Snapshot()
 
 	// Parse the number
 	var sb strings.Builder
-	i := pos
+	consumed := 0
 
 	// Handle optional sign
 	if hasSign {
-		sb.WriteByte(input[i])
-		i++
+		sb.WriteByte(r.Current())
+		r.Advance(1)
+		consumed++
 	}
 
 	// Parse integer part
 	hasIntPart := false
-	for i < len(input) && isDigit(input[i]) {
-		sb.WriteByte(input[i])
+	for !r.EOF() && isDigit(r.Current()) {
+		sb.WriteByte(r.Current())
+		r.Advance(1)
+		consumed++
 		hasIntPart = true
-		i++
 	}
 
 	// Parse optional decimal part
 	hasDecimal := false
-	if i < len(input) && input[i] == '.' {
+	if !r.EOF() && r.Current() == '.' {
 		// Look ahead to ensure there's at least one digit after the dot
 		// or we already have an integer part
-		if i+1 < len(input) && isDigit(input[i+1]) {
+		nextCh, hasNext := r.Peek(1)
+		if hasNext && isDigit(nextCh) {
 			sb.WriteByte('.')
-			i++
+			r.Advance(1)
+			consumed++
 			hasDecimal = true
-			for i < len(input) && isDigit(input[i]) {
-				sb.WriteByte(input[i])
-				i++
+			for !r.EOF() && isDigit(r.Current()) {
+				sb.WriteByte(r.Current())
+				r.Advance(1)
+				consumed++
 			}
 		} else if hasIntPart {
 			// Allow trailing dot like "42."
 			sb.WriteByte('.')
-			i++
+			r.Advance(1)
+			consumed++
 			hasDecimal = true
 		}
 	}
 
 	// Must have at least some digits
 	if !hasIntPart && !hasDecimal {
-		return n.PassToNext(input, pos, line, linePos, file)
+		return n.PassToNext(r)
 	}
 
 	// Check that we actually parsed something beyond just a sign
 	raw := sb.String()
 	if raw == "+" || raw == "-" || raw == "." {
-		return n.PassToNext(input, pos, line, linePos, file)
+		return n.PassToNext(r)
 	}
 
-	return NewToken(file, pos, line, linePos, raw, Number), i - pos, true
+	return NewToken(file, pos, line, linePos, raw, Number), true
 }
 
 func isDigit(ch byte) bool {

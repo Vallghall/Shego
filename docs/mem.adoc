@@ -1,0 +1,415 @@
+= Memory Package (pkg/mem)
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+== Overview
+
+The `mem` package provides the memory abstraction layer for the Scheme interpreter. It defines:
+
+* **Object**: Interface for all Scheme values (numbers, strings, procedures, etc.)
+* **Context**: Interface for lexical environments (variable bindings)
+* **Errors**: Typed errors for runtime error handling
+
+This layer abstracts program state and is independent of parsing/evaluation logic.
+
+== Package Structure
+
+[source]
+----
+pkg/mem/
+├── object.go    # Object interface and concrete types
+├── context.go   # Context interface and implementation
+├── primitive.go # PrimitiveFunc type and Definition struct
+└── errors.go    # Error types
+----
+
+== Object System
+
+=== Object Interface
+
+Every Scheme value implements the `Object` interface:
+
+[source,go]
+----
+type Object interface {
+    Type() ObjectType    // Concrete type of this object
+    IsCallable() bool    // Can be invoked as a procedure?
+    IsTruthy() bool      // Boolean interpretation
+    String() string      // Human-readable representation
+    Equal(Object) bool   // Structural equality
+}
+----
+
+=== Object Types
+
+[cols="1,2,2,1"]
+|===
+| Type | Description | Example | Truthy?
+
+| `TypeNil`
+| Empty list
+| `()`
+| Yes
+
+| `TypeVoid`
+| No meaningful value
+| `#<void>`
+| Yes
+
+| `TypeBoolean`
+| Boolean value
+| `#t`, `#f`
+| `#t` only
+
+| `TypeNumber`
+| Numeric (float64)
+| `42`, `3.14`
+| Yes
+
+| `TypeString`
+| Text string
+| `"hello"`
+| Yes
+
+| `TypeSymbol`
+| Interned symbol
+| `foo`, `+`
+| Yes
+
+| `TypePair`
+| Cons cell
+| `(1 . 2)`
+| Yes
+
+| `TypeProcedure`
+| Callable
+| `#<procedure:+>`
+| Yes
+|===
+
+**Note**: In Scheme, only `#f` is falsy. Even `()` (nil) is truthy.
+
+=== Singleton Objects
+
+Pre-defined singleton objects:
+
+[source,go]
+----
+mem.Nil   // Empty list '()
+mem.Void  // Void value (side-effect results)
+mem.True  // Boolean true #t
+mem.False // Boolean false #f (only falsy value)
+----
+
+=== Creating Objects
+
+[source,go]
+----
+// Numbers
+n := mem.NewNumber(42.0)
+n := mem.NewNumberFromInt(42)
+
+// Strings
+s := mem.NewString("hello")
+
+// Symbols (using atom pool)
+sym := mem.NewSymbol(atomID, pool)
+
+// Booleans
+b := mem.Boolean(true)  // Returns mem.True or mem.False
+
+// Pairs
+p := mem.NewPair(car, cdr)
+
+// Lists from slices
+list := mem.SliceToList([]mem.Object{a, b, c})
+
+// Procedures
+prim := mem.NewPrimitive("+", 2, addFunc)
+variadic := mem.NewVariadicPrimitive("list", listFunc)
+lambda := mem.NewLambda("square", params, body, ctx)
+----
+
+=== Type Coercion
+
+Safe type conversion with error handling:
+
+[source,go]
+----
+num, err := mem.AsNumber(obj)
+str, err := mem.AsString(obj)
+sym, err := mem.AsSymbol(obj)
+pair, err := mem.AsPair(obj)
+proc, err := mem.AsProcedure(obj)
+----
+
+=== List Operations
+
+[source,go]
+----
+// Check if proper list
+if mem.IsList(obj) { ... }
+
+// Convert list to slice
+elements, err := mem.ListToSlice(list)
+
+// Convert slice to list
+list := mem.SliceToList(elements)
+----
+
+== Context System
+
+=== Context Interface
+
+[source,go]
+----
+type Context interface {
+    Define(name atom.ID, value Object) error  // Create binding
+    Lookup(name atom.ID) (Object, bool)       // Find binding
+    Set(name atom.ID, value Object) error     // Modify binding
+    Parent() Context                          // Enclosing scope
+    Extend() Context                          // Create child scope
+    IsDefined(name atom.ID) bool              // Check immediate scope
+    Names() []atom.ID                         // List bindings
+}
+----
+
+=== Lexical Scoping
+
+Contexts form a chain for lexical scope resolution:
+
+[source]
+----
+┌─────────────────────────────────────┐
+│ Global Context                      │
+│   define, lambda, +, -, *, / ...    │
+└─────────────────┬───────────────────┘
+                  │ parent
+┌─────────────────▼───────────────────┐
+│ Function Context                    │
+│   x = 10                            │
+└─────────────────┬───────────────────┘
+                  │ parent
+┌─────────────────▼───────────────────┐
+│ Let Context                         │
+│   y = 20                            │
+└─────────────────────────────────────┘
+----
+
+**Lookup** searches up the chain until found or top-level.
+**Set** modifies the binding in the scope where it was defined.
+**Define** always creates in the current scope (may shadow parent).
+
+=== Creating Contexts
+
+[source,go]
+----
+// Top-level context
+global := mem.NewContext()
+
+// Child context
+child := global.Extend()
+
+// Child with bindings (for procedure application)
+child, err := mem.ExtendWith(parent, paramNames, argValues)
+----
+
+=== Example: Closures
+
+[source,go]
+----
+// (define (make-adder n) (lambda (x) (+ x n)))
+// (define add5 (make-adder 5))
+// (add5 10) => 15
+
+// When make-adder is called with n=5:
+// 1. Create child context with n=5
+// 2. Lambda captures this context
+// 3. When add5 is called with x=10:
+//    - Extend captured context with x=10
+//    - Evaluate (+ x n) → 15
+
+makeAdderCtx := global.Extend()
+makeAdderCtx.Define(nID, mem.NewNumber(5))
+
+lambda := mem.NewLambda("", []atom.ID{xID}, body, makeAdderCtx)
+// lambda.Context() returns makeAdderCtx
+----
+
+== Error Types
+
+=== TypeError
+
+Invalid type for operation:
+
+[source,go]
+----
+err := mem.NewTypeError(mem.TypeNumber, mem.TypeString, "in addition")
+// "type error: expected number, got string: in addition"
+----
+
+=== UnboundError
+
+Variable not defined:
+
+[source,go]
+----
+err := mem.NewUnboundError(nameID, pool)
+// "unbound variable: foo"
+----
+
+=== ArityError
+
+Wrong number of arguments:
+
+[source,go]
+----
+err := mem.NewArityError("+", 2, 3)
+// "+: expected 2 argument(s), got 3"
+
+err := mem.NewArityAtLeastError("list", 0, -1)
+// "list: expected at least 0 argument(s), got -1"
+----
+
+=== NotCallableError
+
+Calling a non-procedure:
+
+[source,go]
+----
+err := mem.NewNotCallableError(mem.NewNumber(42))
+// "not callable: number is not a procedure"
+----
+
+=== Other Errors
+
+[source,go]
+----
+&DivisionByZeroError{}
+&ImmutableError{Type: TypePair, Message: "..."}
+&IndexError{Index: 5, Size: 3, Type: "list"}
+&SyntaxError{Message: "...", Context: "if"}
+&RuntimeError{Message: "...", Cause: err}
+----
+
+== Primitive Function Types
+
+=== PrimitiveFunc
+
+The `mem` package defines the primitive function signature:
+
+[source,go]
+----
+type PrimitiveFunc func(args []Object) (Object, error)
+----
+
+This type is used for all built-in procedures. By defining it in `mem` instead of `eval`,
+builtin packages can be completely independent of the evaluator.
+
+=== Definition
+
+The `Definition` struct is used for bulk loading of bindings:
+
+[source,go]
+----
+type Definition struct {
+    Name  string
+    Value Object
+}
+----
+
+This allows builtin packages to return collections of definitions without
+depending on the eval package.
+
+=== Example: Custom Builtin
+
+[source,go]
+----
+package mybuiltins
+
+import "github.com/Vallghall/schego/pkg/mem"
+
+func Definitions() []mem.Definition {
+    return []mem.Definition{
+        {Name: "double", Value: mem.NewPrimitive("double", 1, doubleFunc)},
+    }
+}
+
+func doubleFunc(args []mem.Object) (mem.Object, error) {
+    n, err := mem.AsNumber(args[0])
+    if err != nil {
+        return nil, err
+    }
+    return mem.NewNumber(n.Value() * 2), nil
+}
+----
+
+== Design Principles
+
+=== Atom-Based Addressing
+
+Bindings are keyed by `atom.ID` from the atom pool, not strings:
+
+* Fast equality comparison
+* Memory efficient
+* Consistent with parser's symbol handling
+
+=== Type Safety
+
+* Operations return errors instead of panicking
+* Type coercion helpers provide safe conversions
+* Clear error messages for debugging
+
+=== Separation of Concerns
+
+* Memory layer knows nothing about parsing/evaluation
+* Objects are data containers, not behavior
+* Context handles only binding management
+
+=== Immutability by Default
+
+* Numbers, strings, symbols, booleans are immutable
+* Only pairs are mutable (`SetCar`, `SetCdr`)
+* Procedures are immutable once created
+
+== Integration Example
+
+[source,go]
+----
+package main
+
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/atom"
+    "github.com/Vallghall/schego/pkg/mem"
+)
+
+func main() {
+    pool := atom.NewPool()
+    
+    // Create global context with primitives
+    global := mem.NewContext()
+    
+    // Define a variable
+    x := pool.Intern("x")
+    global.Define(x, mem.NewNumber(42))
+    
+    // Create a nested scope
+    local := global.Extend()
+    y := pool.Intern("y")
+    local.Define(y, mem.NewNumber(10))
+    
+    // Lookup (searches parent scopes)
+    valX, _ := local.Lookup(x) // Finds in global
+    valY, _ := local.Lookup(y) // Finds in local
+    
+    numX, _ := mem.AsNumber(valX)
+    numY, _ := mem.AsNumber(valY)
+    
+    fmt.Printf("x = %v, y = %v\n", numX.Value(), numY.Value())
+    // Output: x = 42, y = 10
+}
+----
+

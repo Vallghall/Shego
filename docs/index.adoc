@@ -20,12 +20,31 @@ schego/
 ├── cmd/
 │   ├── schego/           # CLI interpreter executable
 │   └── schego-repl/      # REPL with tview TUI
-├── pkg/                  # Library packages (public API)
+├── pkg/
+│   ├── lex/              # Lexer/tokenizer package
+│   ├── ast/              # AST and parser package
+│   ├── atom/             # Atom interning pool
+│   ├── mem/              # Memory abstraction (objects, contexts)
+│   ├── eval/             # Evaluator and state management
+│   └── builtin/          # Built-in procedures
+│       ├── aryth/        # Arithmetic operations
+│       └── cmp/          # Comparison operations
 ├── test/                 # Integration tests
 ├── docs/                 # Documentation (AsciiDoc)
 ├── go.mod
 └── Makefile
 ----
+
+== Package Documentation
+
+The following packages are documented in detail:
+
+* link:lex.adoc[Lexer Package (pkg/lex)] - Tokenization of Scheme source code
+* link:ast.adoc[AST Package (pkg/ast)] - Parsing tokens into Abstract Syntax Tree
+* link:atom.adoc[Atom Package (pkg/atom)] - Atom interning pool for efficient symbol storage
+* link:mem.adoc[Memory Package (pkg/mem)] - Objects, contexts, and runtime errors
+* link:eval.adoc[Eval Package (pkg/eval)] - Evaluator and interpreter state
+* link:builtin.adoc[Builtin Package (pkg/builtin)] - Built-in Scheme procedures
 
 == Getting Started
 
@@ -54,15 +73,59 @@ make build-repl
 ./bin/schego-repl
 ----
 
+=== Testing
+
+[source,bash]
+----
+# Run all tests
+make test
+----
+
 == Usage
 
 === As a Library
 
 [source,go]
 ----
-import "github.com/Vallghall/schego/pkg/schego"
+package main
 
-// TODO: Add library usage examples
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/ast"
+    "github.com/Vallghall/schego/pkg/builtin"
+    "github.com/Vallghall/schego/pkg/eval"
+    "github.com/Vallghall/schego/pkg/lex"
+)
+
+func main() {
+    // Tokenize source code
+    lexer := lex.New()
+    tokens, err := lexer.Tokenize(`(+ 1 2)`)
+    if err != nil {
+        panic(err)
+    }
+
+    // Parse into AST
+    parser := ast.New()
+    nodes, err := parser.Parse(tokens)
+    if err != nil {
+        panic(err)
+    }
+
+    // Create evaluator with built-in functions
+    evaluator := eval.New()
+    if err := builtin.Load(evaluator.State()); err != nil {
+        panic(err)
+    }
+
+    // Evaluate the program
+    result, err := evaluator.Eval(nodes)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("Result: %s\n", result) // Output: Result: 3
+}
 ----
 
 === Command Line
@@ -81,7 +144,50 @@ Launch the interactive REPL:
 schego-repl
 ----
 
+== Architecture
+
+Schego uses a pipeline architecture for processing Scheme code:
+
+[source]
+----
+Source Code → Lexer → Tokens → Parser → AST → Evaluator → Result
+                │                 │             │
+                ▼                 ▼             ▼
+           pkg/lex            pkg/ast       pkg/eval
+                                  │         (evaluation)
+                                  ▼             │
+                              pkg/atom      pkg/builtin
+                              (symbols)     (primitives)
+                                  │             │
+                                  ▼             ▼
+                              pkg/mem ←─────────┘
+                              (objects, contexts)
+----
+
+=== Design Patterns
+
+* **Chain of Responsibility**: Both lexer and parser use this pattern for extensibility
+** Lexer Chain: `ParenNode → StringNode → NumberNode → AtomNode`
+** Parser Chain: `SpecialFormsNode → ListParseNode → AtomParseNode`
+
+* **String Interning**: The atom pool stores symbols once and references them by ID
+** Memory efficient: duplicate symbols share storage
+** Fast comparison: integer equality instead of string comparison
+
+* **Memory Abstraction**: Separates object representation from evaluation
+** Objects: Type-safe Scheme values with coercion helpers
+** Contexts: Lexical environments with nested scoping
+
+* **State Management**: Evaluator state is separate from evaluation logic
+** Global and current context tracking
+** Atom pool integration for symbol resolution
+** Context stack for procedure calls and let bindings
+
+* **Modular Builtins**: Built-in procedures are organized into subpackages
+** Arithmetic: `+`, `-`, `*`, `/`, `modulo`, `abs`, `min`, `max`
+** Comparison: `=`, `<`, `>`, `<=`, `>=`, predicates
+** Easily extensible with new categories
+
 == License
 
 // TODO: Add license information
-

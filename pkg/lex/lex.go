@@ -65,41 +65,21 @@ func New(opts ...Option) Lexer {
 // Tokenize parses the input string and returns a slice of tokens.
 func (l *lexer) Tokenize(input string) ([]Token, error) {
 	var tokens []Token
+	r := NewReader(input, l.file)
 
-	pos := 0
-	line := 1
-	linePos := 1
-
-	for pos < len(input) {
-		ch := input[pos]
-
-		// Skip whitespace while tracking position
-		if ch == ' ' || ch == '\t' {
-			pos++
-			linePos++
-			continue
+	for !r.EOF() {
+		// Skip whitespace
+		r.SkipWhitespace()
+		if r.EOF() {
+			break
 		}
 
-		if ch == '\n' {
-			pos++
-			line++
-			linePos = 1
-			continue
-		}
-
-		if ch == '\r' {
-			pos++
-			// Handle \r\n as single newline
-			if pos < len(input) && input[pos] == '\n' {
-				pos++
-			}
-			line++
-			linePos = 1
-			continue
-		}
+		// Save position for error reporting
+		file, pos, line, linePos := r.Snapshot()
+		ch := r.Current()
 
 		// Try to parse a token using the chain
-		token, consumed, handled := l.chain.Handle(input, pos, line, linePos, l.file)
+		token, handled := l.chain.Handle(r)
 
 		if !handled || token == nil {
 			// Check for specific error conditions
@@ -109,7 +89,7 @@ func (l *lexer) Tokenize(input string) ([]Token, error) {
 					Position: pos,
 					Line:     line,
 					LinePos:  linePos,
-					File:     l.file,
+					File:     file,
 				}
 			}
 
@@ -118,22 +98,11 @@ func (l *lexer) Tokenize(input string) ([]Token, error) {
 				Position: pos,
 				Line:     line,
 				LinePos:  linePos,
-				File:     l.file,
+				File:     file,
 			}
 		}
 
 		tokens = append(tokens, token)
-
-		// Update position tracking
-		for i := 0; i < consumed; i++ {
-			if input[pos+i] == '\n' {
-				line++
-				linePos = 1
-			} else {
-				linePos++
-			}
-		}
-		pos += consumed
 	}
 
 	return tokens, nil

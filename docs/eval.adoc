@@ -1,0 +1,299 @@
+= Eval Package Documentation
+:toc: left
+:toclevels: 3
+:source-highlighter: highlight.js
+
+== Overview
+
+The `pkg/eval` package provides the evaluation engine for the Scheme interpreter. It consists of two main components:
+
+1. **State** (`state.go`): Manages the interpreter's runtime state, including the atom pool and lexical contexts.
+2. **Evaluator** (`eval.go`): Evaluates AST nodes and executes Scheme programs.
+
+== State Management
+
+=== State Structure
+
+The `State` struct holds the complete runtime state of the interpreter:
+
+[source,go]
+----
+type State struct {
+    pool    *atom.Pool    // Atom interning pool
+    global  mem.Context   // Top-level environment
+    current mem.Context   // Current evaluation context
+}
+----
+
+=== Constructors
+
+[cols="1,2"]
+|===
+| Function | Description
+
+| `NewState()`
+| Creates a new state with fresh atom pool and empty global context
+
+| `NewStateWithPool(pool *atom.Pool)`
+| Creates a new state using an existing atom pool
+|===
+
+=== Symbol Management
+
+The state provides convenient methods for atom interning:
+
+[cols="1,2"]
+|===
+| Method | Description
+
+| `Intern(name string) atom.ID`
+| Interns a string and returns its atom ID
+
+| `Resolve(id atom.ID) string`
+| Returns the string for an atom ID
+|===
+
+=== Binding Operations
+
+Bindings can be managed at both current and global context levels:
+
+==== Current Context Operations
+
+[source,go]
+----
+// Define a new binding
+state.Define(nameID, value)
+state.DefineByName("foo", value)
+
+// Look up a binding
+value, ok := state.Lookup(nameID)
+value, ok := state.LookupByName("foo")
+value, err := state.LookupOrError(nameID)
+
+// Modify an existing binding
+state.Set(nameID, newValue)
+state.SetByName("foo", newValue)
+----
+
+==== Global Context Operations
+
+[source,go]
+----
+// Define in global scope
+state.DefineGlobal(nameID, value)
+state.DefineGlobalByName("foo", value)
+
+// Look up in global scope only
+value, ok := state.LookupGlobal(nameID)
+----
+
+=== Context Management
+
+The state supports context switching for procedure calls and let bindings:
+
+[source,go]
+----
+// Create extended context
+ctx := state.ExtendCurrent()
+ctx, err := state.ExtendCurrentWith(names, values)
+
+// Execute with temporary context
+err := state.WithContext(ctx, func() error {
+    // Code runs with ctx as current
+    return nil
+})
+----
+
+=== Loading Definitions
+
+Bulk loading of definitions is supported for builtins:
+
+[source,go]
+----
+type Definition struct {
+    Name  string
+    Value mem.Object
+}
+
+state.LoadDefinitions(defs)
+state.LoadBuiltins(provider)
+----
+
+== Evaluator
+
+=== Interface
+
+[source,go]
+----
+type Evaluator interface {
+    // State returns the interpreter state
+    State() *State
+
+    // Eval evaluates a sequence of AST nodes
+    Eval(nodes []ast.Node) (mem.Object, error)
+
+    // EvalOne evaluates a single AST node
+    EvalOne(node ast.Node) (mem.Object, error)
+}
+----
+
+=== Constructors
+
+[cols="1,2"]
+|===
+| Function | Description
+
+| `New()`
+| Creates an evaluator with fresh state
+
+| `NewWithState(state *State)`
+| Creates an evaluator with existing state
+|===
+
+=== Evaluation Rules
+
+The evaluator handles all AST node types:
+
+==== Self-Evaluating Forms
+
+[cols="1,2"]
+|===
+| Node Type | Behavior
+
+| `NumberNode`
+| Parses to numeric value
+
+| `StringNode`
+| Returns string object
+
+| `SymbolNode`
+| Looks up in current context (handles `#t`, `#f` specially)
+
+| `ListNode`
+| Empty list returns `Nil`
+|===
+
+==== Special Forms
+
+[cols="1,2"]
+|===
+| Form | Semantics
+
+| `if`
+| Evaluates condition, then appropriate branch
+
+| `begin`
+| Evaluates expressions sequentially, returns last
+
+| `define`
+| Creates binding (simple or function)
+
+| `lambda`
+| Creates closure capturing current context
+
+| `let`
+| Creates local bindings, evaluates body
+
+| `cond`
+| Multi-way conditional
+
+| `quote`
+| Returns unevaluated data as Scheme objects
+|===
+
+==== Procedure Calls
+
+The evaluator supports two procedure types:
+
+1. **Primitives**: Built-in Go functions
+2. **Lambdas**: User-defined procedures with captured context
+
+[source,go]
+----
+// Primitive function signature (defined in mem package)
+type PrimitiveFunc func(args []Object) (Object, error)
+----
+
+NOTE: The `PrimitiveFunc` type is defined in the `mem` package, not `eval`.
+This allows builtin packages to be independent of the evaluator.
+
+=== Example Usage
+
+[source,go]
+----
+package main
+
+import (
+    "fmt"
+    "github.com/Vallghall/schego/pkg/ast"
+    "github.com/Vallghall/schego/pkg/builtin"
+    "github.com/Vallghall/schego/pkg/eval"
+    "github.com/Vallghall/schego/pkg/lex"
+)
+
+func main() {
+    // Parse program
+    lexer := lex.New()
+    tokens, _ := lexer.Tokenize("(+ 1 2 3)")
+    
+    parser := ast.New()
+    nodes, _ := parser.Parse(tokens)
+    
+    // Create evaluator with builtins
+    evaluator := eval.New()
+    builtin.Load(evaluator.State())
+    
+    // Evaluate
+    result, _ := evaluator.Eval(nodes)
+    fmt.Println(result) // Output: 6
+}
+----
+
+== Design Principles
+
+=== Separation of Concerns
+
+- **State** handles storage and lookup
+- **Evaluator** handles interpretation logic
+- **Builtins** are loaded externally, keeping eval pure
+
+=== Lexical Scoping
+
+Closures capture their definition context:
+
+[source,scheme]
+----
+(define (make-counter)
+  (let ((count 0))
+    (lambda ()
+      (set! count (+ count 1))
+      count)))
+----
+
+The lambda captures the `let` environment containing `count`.
+
+=== Context Stack
+
+During evaluation, contexts form a chain:
+
+----
+Global Context
+    └── Let Binding Context
+        └── Lambda Application Context
+            └── ...
+----
+
+Each context has access to parent bindings, enabling shadowing.
+
+== Error Handling
+
+Evaluation errors include:
+
+- `UnboundError`: Variable not found
+- `TypeError`: Wrong argument type
+- `ArityError`: Wrong argument count
+- `NotCallableError`: Attempting to call non-procedure
+- `RuntimeError`: General evaluation failure
+
+All errors include context for debugging.
+
