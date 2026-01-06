@@ -143,8 +143,8 @@ type Evaluator interface {
 |===
 | Function | Description
 
-| `New()`
-| Creates an evaluator with fresh state
+| `New() (Evaluator, error)`
+| Creates an evaluator with fresh state and builtins loaded automatically
 
 | `NewWithState(state *State)`
 | Creates an evaluator with existing state
@@ -226,7 +226,6 @@ package main
 import (
     "fmt"
     "github.com/Vallghall/schego/pkg/ast"
-    "github.com/Vallghall/schego/pkg/builtin"
     "github.com/Vallghall/schego/pkg/eval"
     "github.com/Vallghall/schego/pkg/lex"
 )
@@ -239,9 +238,11 @@ func main() {
     parser := ast.New()
     nodes, _ := parser.Parse(tokens)
     
-    // Create evaluator with builtins
-    evaluator := eval.New()
-    builtin.Load(evaluator.State())
+    // Create evaluator (builtins loaded automatically)
+    evaluator, err := eval.New()
+    if err != nil {
+        panic(err)
+    }
     
     // Evaluate
     result, _ := evaluator.Eval(nodes)

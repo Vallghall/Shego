@@ -1,0 +1,217 @@
+= Conversion Module Documentation
+:toc: left
+:toclevels: 3
+:source-highlighter: highlight.js
+
+== Overview
+
+The `pkg/core/builtin` package contains conversion operations as part of the builtin module (`conv.go`). These procedures allow converting between numbers, strings, symbols, and lists.
+
+== Package Structure
+
+----
+pkg/core/builtin/
+├── builtin.go  # Aggregates all builtin definitions
+├── aryth.go    # Arithmetic operations
+├── cmp.go      # Comparison operations
+└── conv.go     # Conversion operations
+
+core/builtin/
+└── conv.scm    # Scheme stubs for conversion ops
+----
+
+== Exported Function
+
+[source,go]
+----
+func Definitions() []mem.Definition
+----
+
+Returns all conversion operation definitions for registration with the evaluator.
+
+== Procedures
+
+=== Number/String Conversions
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `number->string`
+| 1
+| Converts a number to its string representation
+
+| `string->number`
+| 1
+| Parses a string as a number, returns `#f` if unparseable
+|===
+
+=== Symbol/String Conversions
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `symbol->string`
+| 1
+| Returns the symbol's name as a string
+|===
+
+=== String/List Conversions
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `string->list`
+| 1
+| Converts a string to a list of single-character strings
+
+| `list->string`
+| 1
+| Converts a list of strings to a concatenated string
+|===
+
+=== Character/Integer Conversions
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `integer->char`
+| 1
+| Converts a Unicode code point to a single-character string
+
+| `char->integer`
+| 1
+| Converts a single-character string to its Unicode code point
+|===
+
+== Examples
+
+=== Number/String Conversions
+
+[source,scheme]
+----
+(number->string 42)        ; => "42"
+(number->string 3.14)      ; => "3.14"
+(number->string -5)        ; => "-5"
+
+(string->number "42")      ; => 42
+(string->number "3.14")    ; => 3.14
+(string->number "hello")   ; => #f (cannot parse)
+----
+
+=== Symbol/String Conversions
+
+[source,scheme]
+----
+(symbol->string 'hello)    ; => "hello"
+(symbol->string 'foo-bar)  ; => "foo-bar"
+----
+
+=== String/List Conversions
+
+[source,scheme]
+----
+(string->list "abc")       ; => ("a" "b" "c")
+(string->list "hello")     ; => ("h" "e" "l" "l" "o")
+(string->list "")          ; => ()
+
+(list->string '("a" "b" "c"))   ; => "abc"
+(list->string '("hello" " " "world"))  ; => "hello world"
+----
+
+=== Character/Integer Conversions
+
+[source,scheme]
+----
+(integer->char 65)         ; => "A"
+(integer->char 97)         ; => "a"
+(integer->char 955)        ; => "λ" (Greek lambda)
+
+(char->integer "A")        ; => 65
+(char->integer "a")        ; => 97
+(char->integer "λ")        ; => 955
+----
+
+== Error Handling
+
+=== Type Errors
+
+All conversion procedures validate input types:
+
+[source,scheme]
+----
+(number->string "42")      ; Error: expected number, got string
+(string->number 42)        ; Error: expected string, got number
+(symbol->string "hello")   ; Error: expected symbol, got string
+----
+
+=== Validation Errors
+
+[source,scheme]
+----
+(integer->char 3.14)       ; Error: expected integer, got 3.14
+(integer->char -1)         ; Error: code point out of range
+(integer->char 1114112)    ; Error: code point out of range (max is 0x10FFFF)
+(char->integer "abc")      ; Error: expected single character, got string of length 3
+----
+
+== Implementation Notes
+
+=== Unicode Support
+
+The character conversion procedures fully support Unicode:
+
+- `string->list` correctly handles multi-byte UTF-8 characters
+- `integer->char` accepts any valid Unicode code point (0 to 0x10FFFF)
+- `char->integer` returns the Unicode code point of the character
+
+=== String Representation
+
+Since Schego represents characters as single-character strings (not a separate char type):
+
+- `string->list` returns a list of single-character strings
+- `list->string` concatenates any strings in the list
+
+=== Parsing Behavior
+
+`string->number` follows Scheme conventions:
+
+- Returns `#f` for unparseable strings (not an error)
+- Supports integer and floating-point formats
+- Uses Go's `strconv.ParseFloat` for parsing
+
+== Go API
+
+=== Using Conversion Definitions
+
+[source,go]
+----
+import (
+    "github.com/Vallghall/schego/pkg/core/builtin"
+    "github.com/Vallghall/schego/pkg/mem"
+)
+
+// Get all builtin definitions (includes conversion)
+defs := builtin.Definitions()
+
+// Or get just conversion definitions
+convDefs := builtin.ConvDefinitions()
+
+// Each definition has a Name and Value
+for _, def := range convDefs {
+    fmt.Printf("%s: %v\n", def.Name, def.Value)
+}
+----
+
+=== Primitive Function Signature
+
+All conversion procedures follow the standard primitive signature:
+
+[source,go]
+----
+func(args []mem.Object) (mem.Object, error)
+----
+

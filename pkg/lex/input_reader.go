@@ -47,9 +47,9 @@ func NewReader(input string, file string) Reader {
 	}
 }
 
-func (r *inputReader) File() string     { return r.file }
-func (r *inputReader) Position() int    { return r.pos }
-func (r *inputReader) Line() int        { return r.line }
+func (r *inputReader) File() string      { return r.file }
+func (r *inputReader) Position() int     { return r.pos }
+func (r *inputReader) Line() int         { return r.line }
 func (r *inputReader) LinePosition() int { return r.linePos }
 
 // EOF returns true if the reader has reached the end of input.
@@ -126,4 +126,3 @@ func (r *inputReader) SkipWhitespace() bool {
 func (r *inputReader) Snapshot() (file string, pos int, line int, linePos int) {
 	return r.file, r.pos, r.line, r.linePos
 }
-

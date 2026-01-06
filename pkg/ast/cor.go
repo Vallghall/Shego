@@ -109,4 +109,3 @@ func BuildParseChain(nodes ...ParseNode) ParseNode {
 	}
 	return nodes[0]
 }
-

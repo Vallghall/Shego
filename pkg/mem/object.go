@@ -74,10 +74,10 @@ var Nil Object = &nilObject{}
 
 type nilObject struct{}
 
-func (*nilObject) Type() ObjectType  { return TypeNil }
-func (*nilObject) IsCallable() bool  { return false }
-func (*nilObject) IsTruthy() bool    { return true } // nil is truthy in Scheme!
-func (*nilObject) String() string    { return "()" }
+func (*nilObject) Type() ObjectType    { return TypeNil }
+func (*nilObject) IsCallable() bool    { return false }
+func (*nilObject) IsTruthy() bool      { return true } // nil is truthy in Scheme!
+func (*nilObject) String() string      { return "()" }
 func (*nilObject) Equal(o Object) bool { return o.Type() == TypeNil }
 
 // Void represents no meaningful value (result of side-effect operations)
@@ -85,10 +85,10 @@ var Void Object = &voidObject{}
 
 type voidObject struct{}
 
-func (*voidObject) Type() ObjectType  { return TypeVoid }
-func (*voidObject) IsCallable() bool  { return false }
-func (*voidObject) IsTruthy() bool    { return true }
-func (*voidObject) String() string    { return "#<void>" }
+func (*voidObject) Type() ObjectType    { return TypeVoid }
+func (*voidObject) IsCallable() bool    { return false }
+func (*voidObject) IsTruthy() bool      { return true }
+func (*voidObject) String() string      { return "#<void>" }
 func (*voidObject) Equal(o Object) bool { return o.Type() == TypeVoid }
 
 // True is the boolean true value
@@ -354,12 +354,12 @@ const (
 // It captures its definition context for lexical scoping.
 type Procedure struct {
 	kind    ProcedureType
-	name    string   // Optional name for debugging
-	arity   int      // Expected argument count, -1 for variadic
-	context Context  // Lexical environment where defined (for lambdas)
+	name    string    // Optional name for debugging
+	arity   int       // Expected argument count, -1 for variadic
+	context Context   // Lexical environment where defined (for lambdas)
 	params  []atom.ID // Parameter names (for lambdas)
-	body    []any    // Body expressions (for lambdas) - stored as AST nodes
-	native  any      // Native function (for primitives)
+	body    []any     // Body expressions (for lambdas) - stored as AST nodes
+	native  any       // Native function (for primitives)
 }
 
 func (*Procedure) Type() ObjectType { return TypeProcedure }
@@ -534,4 +534,3 @@ func SliceToList(elements []Object) Object {
 	}
 	return result
 }
-

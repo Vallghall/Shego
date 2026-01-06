@@ -557,4 +557,3 @@ func getTypeName(n ast.Node) string {
 		return "unknown"
 	}
 }
-

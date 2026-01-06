@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/Vallghall/schego/pkg/ast"
-	"github.com/Vallghall/schego/pkg/builtin"
 	"github.com/Vallghall/schego/pkg/eval"
 	"github.com/Vallghall/schego/pkg/lex"
 	"github.com/Vallghall/schego/pkg/mem"
@@ -42,10 +41,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create evaluator with builtins
-	evaluator := eval.New()
-	if err := evaluator.State().LoadBuiltins(builtin.All); err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading builtins: %v\n", err)
+	// Create evaluator (builtins are loaded automatically)
+	evaluator, err := eval.New()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating evaluator: %v\n", err)
 		os.Exit(1)
 	}
 

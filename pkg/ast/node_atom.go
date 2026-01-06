@@ -42,4 +42,3 @@ func (a *AtomParseNode) Handle(r TokenReader) (Node, bool) {
 		return a.PassToNext(r)
 	}
 }
-

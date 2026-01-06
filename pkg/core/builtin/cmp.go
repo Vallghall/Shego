@@ -1,11 +1,11 @@
-package cmp
+package builtin
 
 import (
 	"github.com/Vallghall/schego/pkg/mem"
 )
 
-// Definitions returns all comparison operation definitions.
-func Definitions() []mem.Definition {
+// CmpDefinitions returns all comparison operation definitions.
+func CmpDefinitions() []mem.Definition {
 	return []mem.Definition{
 		{Name: "=", Value: mem.NewVariadicPrimitive("=", numEqual)},
 		{Name: "<", Value: mem.NewVariadicPrimitive("<", lessThan)},

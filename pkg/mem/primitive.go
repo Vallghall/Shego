@@ -12,4 +12,3 @@ type Definition struct {
 	Name  string
 	Value Object
 }
-
