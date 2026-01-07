@@ -5,6 +5,7 @@ import (
 
 	"github.com/Vallghall/schego/pkg/ast"
 	"github.com/Vallghall/schego/pkg/atom"
+	"github.com/Vallghall/schego/pkg/core"
 	"github.com/Vallghall/schego/pkg/mem"
 )
 
@@ -25,11 +26,16 @@ type evaluator struct {
 	state *State
 }
 
-// New creates a new Evaluator with empty state.
-func New() Evaluator {
-	return &evaluator{
-		state: NewState(),
+// New creates a new Evaluator with builtins loaded.
+func New() (Evaluator, error) {
+	state := NewState()
+	// Load core builtins automatically
+	if err := state.LoadBuiltins(core.All); err != nil {
+		return nil, fmt.Errorf("failed to load builtins: %w", err)
 	}
+	return &evaluator{
+		state: state,
+	}, nil
 }
 
 // NewWithState creates a new Evaluator with the given state.
@@ -433,5 +439,3 @@ func (e *evaluator) astToObject(node ast.Node) (mem.Object, error) {
 		return nil, mem.NewRuntimeError(fmt.Sprintf("cannot quote: %T", node))
 	}
 }
-
-

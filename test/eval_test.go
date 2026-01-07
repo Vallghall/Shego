@@ -3,8 +3,9 @@ package test
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Vallghall/schego/pkg/ast"
-	"github.com/Vallghall/schego/pkg/builtin"
 	"github.com/Vallghall/schego/pkg/eval"
 	"github.com/Vallghall/schego/pkg/lex"
 	"github.com/Vallghall/schego/pkg/mem"
@@ -17,28 +18,20 @@ func evalProgram(t *testing.T, program string) (mem.Object, *eval.State) {
 	// Tokenize
 	lexer := lex.New()
 	tokens, err := lexer.Tokenize(program)
-	if err != nil {
-		t.Fatalf("lexer error: %v", err)
-	}
+	require.NoError(t, err, "lexer error")
 
 	// Parse
 	parser := ast.New()
 	nodes, err := parser.Parse(tokens)
-	if err != nil {
-		t.Fatalf("parser error: %v", err)
-	}
+	require.NoError(t, err, "parser error")
 
-	// Create evaluator with builtins
-	evaluator := eval.New()
-	if err := evaluator.State().LoadBuiltins(builtin.All); err != nil {
-		t.Fatalf("builtin load error: %v", err)
-	}
+	// Create evaluator (builtins are loaded automatically)
+	evaluator, err := eval.New()
+	require.NoError(t, err, "evaluator creation error")
 
 	// Evaluate
 	result, err := evaluator.Eval(nodes)
-	if err != nil {
-		t.Fatalf("eval error: %v", err)
-	}
+	require.NoError(t, err, "eval error")
 
 	return result, evaluator.State()
 }
@@ -46,12 +39,8 @@ func evalProgram(t *testing.T, program string) (mem.Object, *eval.State) {
 func expectNumber(t *testing.T, obj mem.Object, expected float64) {
 	t.Helper()
 	n, err := mem.AsNumber(obj)
-	if err != nil {
-		t.Fatalf("expected number, got %T", obj)
-	}
-	if n.Value() != expected {
-		t.Errorf("expected %v, got %v", expected, n.Value())
-	}
+	require.NoError(t, err, "expected number, got %T", obj)
+	require.Equal(t, expected, n.Value())
 }
 
 func TestEvalArithmetic(t *testing.T) {
@@ -436,4 +425,3 @@ func TestSchemePrograms(t *testing.T) {
 		expectNumber(t, result, 15)
 	})
 }
-

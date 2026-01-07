@@ -1,4 +1,4 @@
-package aryth
+package builtin
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"github.com/Vallghall/schego/pkg/mem"
 )
 
-// Definitions returns all arithmetic operation definitions.
-func Definitions() []mem.Definition {
+// ArythDefinitions returns all arithmetic operation definitions.
+func ArythDefinitions() []mem.Definition {
 	return []mem.Definition{
 		{Name: "+", Value: mem.NewVariadicPrimitive("+", add)},
 		{Name: "-", Value: mem.NewVariadicPrimitive("-", subtract)},

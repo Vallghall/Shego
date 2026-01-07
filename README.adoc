@@ -20,15 +20,26 @@ schego/
 ├── cmd/
 │   ├── schego/           # CLI interpreter executable
 │   └── schego-repl/      # REPL with tview TUI
+├── core/                 # Scheme language definitions (stubs)
+│   ├── builtin/          # Builtin operation stubs
+│   │   ├── aryth.scm     # Arithmetic operations
+│   │   ├── cmp.scm       # Comparison operations
+│   │   └── conv.scm      # Conversion operations
+│   └── math/             # Math operation stubs
+│       └── math.scm      # Mathematical functions
 ├── pkg/
 │   ├── lex/              # Lexer/tokenizer package
 │   ├── ast/              # AST and parser package
 │   ├── atom/             # Atom interning pool
 │   ├── mem/              # Memory abstraction (objects, contexts)
 │   ├── eval/             # Evaluator and state management
-│   └── builtin/          # Built-in procedures
-│       ├── aryth/        # Arithmetic operations
-│       └── cmp/          # Comparison operations
+│   └── core/             # Core language definitions (Go)
+│       ├── builtin/      # Builtin operations
+│       │   ├── aryth.go  # Arithmetic
+│       │   ├── cmp.go    # Comparison
+│       │   └── conv.go   # Conversion
+│       └── math/         # Mathematical operations
+│           └── math.go
 ├── test/                 # Integration tests
 ├── docs/                 # Documentation (AsciiDoc)
 ├── go.mod
@@ -39,12 +50,14 @@ schego/
 
 The following packages are documented in detail:
 
-* link:lex.adoc[Lexer Package (pkg/lex)] - Tokenization of Scheme source code
-* link:ast.adoc[AST Package (pkg/ast)] - Parsing tokens into Abstract Syntax Tree
-* link:atom.adoc[Atom Package (pkg/atom)] - Atom interning pool for efficient symbol storage
-* link:mem.adoc[Memory Package (pkg/mem)] - Objects, contexts, and runtime errors
-* link:eval.adoc[Eval Package (pkg/eval)] - Evaluator and interpreter state
-* link:builtin.adoc[Builtin Package (pkg/builtin)] - Built-in Scheme procedures
+* link:docs/lex.adoc[Lexer Package (pkg/lex)] - Tokenization of Scheme source code
+* link:docs/ast.adoc[AST Package (pkg/ast)] - Parsing tokens into Abstract Syntax Tree
+* link:docs/atom.adoc[Atom Package (pkg/atom)] - Atom interning pool for efficient symbol storage
+* link:docs/mem.adoc[Memory Package (pkg/mem)] - Objects, contexts, and runtime errors
+* link:docs/eval.adoc[Eval Package (pkg/eval)] - Evaluator and interpreter state
+* link:docs/core.adoc[Core Package (pkg/core)] - Built-in Scheme procedures
+* link:docs/conv.adoc[Conversion Module (pkg/core/builtin)] - Type conversion procedures
+* link:docs/math.adoc[Math Module (pkg/core/math)] - Mathematical functions
 
 == Getting Started
 
@@ -92,7 +105,6 @@ package main
 import (
     "fmt"
     "github.com/Vallghall/schego/pkg/ast"
-    "github.com/Vallghall/schego/pkg/builtin"
     "github.com/Vallghall/schego/pkg/eval"
     "github.com/Vallghall/schego/pkg/lex"
 )
@@ -112,9 +124,9 @@ func main() {
         panic(err)
     }
 
-    // Create evaluator with built-in functions
-    evaluator := eval.New()
-    if err := builtin.Load(evaluator.State()); err != nil {
+    // Create evaluator (builtins are loaded automatically)
+    evaluator, err := eval.New()
+    if err != nil {
         panic(err)
     }
 
@@ -156,7 +168,7 @@ Source Code → Lexer → Tokens → Parser → AST → Evaluator → Result
            pkg/lex            pkg/ast       pkg/eval
                                   │         (evaluation)
                                   ▼             │
-                              pkg/atom      pkg/builtin
+                              pkg/atom      pkg/core
                               (symbols)     (primitives)
                                   │             │
                                   ▼             ▼
@@ -183,10 +195,14 @@ Source Code → Lexer → Tokens → Parser → AST → Evaluator → Result
 ** Atom pool integration for symbol resolution
 ** Context stack for procedure calls and let bindings
 
-* **Modular Builtins**: Built-in procedures are organized into subpackages
-** Arithmetic: `+`, `-`, `*`, `/`, `modulo`, `abs`, `min`, `max`
-** Comparison: `=`, `<`, `>`, `<=`, `>=`, predicates
-** Easily extensible with new categories
+* **Modular Core**: Core language procedures are organized into subpackages
+** Builtin: Arithmetic (`+`, `-`, `*`, `/`), Comparison (`=`, `<`, `>`), Conversion, I/O (`display`, `write`, `newline`)
+** Math: `sqrt`, `expt`, `sin`, `cos`, `tan`, `floor`, `ceiling`, `round`, `log`
+** Easily extensible with new modules
+
+* **Dual Definitions**: Each Go module in `pkg/core/` has a corresponding Scheme stub file in `core/`
+** Go implementations in `pkg/core/` provide the actual functionality
+** Scheme stubs in `core/` document the API with docstrings
 
 == License
 

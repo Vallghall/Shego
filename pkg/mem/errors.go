@@ -187,4 +187,3 @@ func NewRuntimeError(msg string) *RuntimeError {
 func WrapRuntimeError(msg string, cause error) *RuntimeError {
 	return &RuntimeError{Message: msg, Cause: cause}
 }
-

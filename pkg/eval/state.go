@@ -188,4 +188,3 @@ func (s *State) LoadBuiltins(provider func() []mem.Definition) error {
 	defs := provider()
 	return s.LoadDefinitions(defs)
 }
-

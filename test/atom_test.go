@@ -232,4 +232,3 @@ func BenchmarkResolve(b *testing.B) {
 		pool.Resolve(id)
 	}
 }
-

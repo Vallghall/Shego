@@ -1,0 +1,301 @@
+= Math Module Documentation
+:toc: left
+:toclevels: 3
+:source-highlighter: highlight.js
+
+== Overview
+
+The `pkg/core/math` subpackage provides mathematical operations for Scheme. These procedures include rounding, exponential, logarithmic, and trigonometric functions, as well as mathematical constants and predicates.
+
+== Package Structure
+
+----
+pkg/core/math/
+└── math.go    # Mathematical operation definitions
+
+core/math/
+└── math.scm   # Scheme stubs for math ops
+----
+
+== Exported Function
+
+[source,go]
+----
+func Definitions() []mem.Definition
+----
+
+Returns all math operation definitions for registration with the evaluator.
+
+== Constants
+
+[cols="1,3"]
+|===
+| Name | Value
+
+| `pi`
+| π (3.141592653589793...)
+
+| `e`
+| Euler's number (2.718281828459045...)
+|===
+
+== Procedures
+
+=== Rounding Operations
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `floor`
+| 1
+| Returns largest integer less than or equal to n
+
+| `ceiling`
+| 1
+| Returns smallest integer greater than or equal to n
+
+| `round`
+| 1
+| Returns nearest integer (banker's rounding)
+
+| `truncate`
+| 1
+| Returns integer part (toward zero)
+|===
+
+=== Exponential and Logarithmic
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `sqrt`
+| 1
+| Returns square root (error if negative)
+
+| `expt`
+| 2
+| Returns base raised to exponent power
+
+| `exp`
+| 1
+| Returns e raised to the power n
+
+| `log`
+| 1 or 2
+| Natural logarithm, or log with specified base
+|===
+
+=== Trigonometric Functions
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `sin`
+| 1
+| Sine (argument in radians)
+
+| `cos`
+| 1
+| Cosine (argument in radians)
+
+| `tan`
+| 1
+| Tangent (argument in radians)
+
+| `asin`
+| 1
+| Arcsine (result in radians, argument in [-1, 1])
+
+| `acos`
+| 1
+| Arccosine (result in radians, argument in [-1, 1])
+
+| `atan`
+| 1 or 2
+| Arctangent; with 2 args, computes atan2(y, x)
+|===
+
+=== Predicates
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `nan?`
+| 1
+| Returns `#t` if argument is NaN
+
+| `infinite?`
+| 1
+| Returns `#t` if argument is infinite
+
+| `finite?`
+| 1
+| Returns `#t` if argument is finite (not NaN or infinite)
+
+| `integer?`
+| 1
+| Returns `#t` if argument is an integer
+|===
+
+== Examples
+
+=== Rounding Operations
+
+[source,scheme]
+----
+(floor 3.7)        ; => 3
+(floor -3.7)       ; => -4
+(ceiling 3.2)      ; => 4
+(ceiling -3.2)     ; => -3
+(round 3.5)        ; => 4
+(round 2.5)        ; => 2 (banker's rounding)
+(truncate 3.7)     ; => 3
+(truncate -3.7)    ; => -3
+----
+
+=== Exponential and Logarithmic
+
+[source,scheme]
+----
+(sqrt 16)          ; => 4
+(sqrt 2)           ; => 1.4142135623730951
+(expt 2 10)        ; => 1024
+(expt 2 0.5)       ; => 1.4142135623730951
+(exp 1)            ; => 2.718281828459045 (e)
+(exp 0)            ; => 1
+(log e)            ; => 1 (natural log)
+(log 100 10)       ; => 2 (log base 10)
+(log 8 2)          ; => 3 (log base 2)
+----
+
+=== Trigonometric Functions
+
+[source,scheme]
+----
+(sin 0)            ; => 0
+(sin (/ pi 2))     ; => 1
+(cos 0)            ; => 1
+(cos pi)           ; => -1
+(tan 0)            ; => 0
+(asin 0)           ; => 0
+(asin 1)           ; => 1.5707963... (π/2)
+(acos 1)           ; => 0
+(atan 1)           ; => 0.7853981... (π/4)
+(atan 1 1)         ; => 0.7853981... (π/4, atan2 form)
+(atan 1 -1)        ; => 2.3561944... (3π/4)
+----
+
+=== Predicates
+
+[source,scheme]
+----
+(integer? 5)       ; => #t
+(integer? 5.0)     ; => #t
+(integer? 5.5)     ; => #f
+(finite? 42)       ; => #t
+(finite? (/ 1 0))  ; => #f (if division by zero returns infinity)
+(nan? (sqrt -1))   ; => depends on implementation
+(infinite? 1e308)  ; => #f
+----
+
+=== Using Constants
+
+[source,scheme]
+----
+pi                 ; => 3.141592653589793
+e                  ; => 2.718281828459045
+
+; Calculate circumference
+(define (circumference r)
+  (* 2 pi r))
+
+(circumference 5)  ; => 31.41592653589793
+
+; Degrees to radians
+(define (deg->rad degrees)
+  (* degrees (/ pi 180)))
+
+(sin (deg->rad 90))  ; => 1
+----
+
+== Error Handling
+
+=== Domain Errors
+
+[source,scheme]
+----
+(sqrt -1)          ; Error: sqrt: negative argument
+(asin 2)           ; Error: asin: argument out of range [-1, 1]
+(acos -2)          ; Error: acos: argument out of range [-1, 1]
+(log 0)            ; Error: log: argument must be positive
+(log -5)           ; Error: log: argument must be positive
+(log 10 0)         ; Error: log: invalid base
+(log 10 1)         ; Error: log: invalid base (log base 1 is undefined)
+----
+
+=== Type Errors
+
+[source,scheme]
+----
+(sqrt "4")         ; Error: expected number, got string
+(sin "0")          ; Error: expected number, got string
+----
+
+== Implementation Notes
+
+=== Radians vs Degrees
+
+All trigonometric functions use radians. To work with degrees, convert using:
+
+[source,scheme]
+----
+(define (deg->rad d) (* d (/ pi 180)))
+(define (rad->deg r) (* r (/ 180 pi)))
+----
+
+=== Precision
+
+All operations use 64-bit floating-point (float64) arithmetic, matching Go's `math` package precision.
+
+=== Special Values
+
+The predicates `nan?`, `infinite?`, and `finite?` can be used to check for special IEEE 754 floating-point values:
+
+- NaN (Not a Number): Result of undefined operations like `(/ 0 0)`
+- Infinity: Result of overflow or division by zero (if not caught as error)
+
+== Go API
+
+=== Using Math Definitions
+
+[source,go]
+----
+import (
+    schmath "github.com/Vallghall/schego/pkg/core/math"
+    "github.com/Vallghall/schego/pkg/mem"
+)
+
+// Get all math definitions
+defs := schmath.Definitions()
+
+// Each definition has a Name and Value
+for _, def := range defs {
+    fmt.Printf("%s: %v\n", def.Name, def.Value)
+}
+----
+
+Note: The package is imported as `schmath` to avoid conflict with Go's standard `math` package.
+
+=== Primitive Function Signature
+
+All math procedures follow the standard primitive signature:
+
+[source,go]
+----
+func(args []mem.Object) (mem.Object, error)
+----
+
