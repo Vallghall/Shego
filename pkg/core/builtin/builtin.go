@@ -5,7 +5,7 @@ import (
 )
 
 // Definitions returns all builtin operation definitions.
-// This aggregates arithmetic, comparison, and conversion operations.
+// This aggregates arithmetic, comparison, conversion, and I/O operations.
 func Definitions() []mem.Definition {
 	var defs []mem.Definition
 
@@ -17,6 +17,9 @@ func Definitions() []mem.Definition {
 
 	// Conversion operations
 	defs = append(defs, ConvDefinitions()...)
+
+	// I/O operations
+	defs = append(defs, IODefinitions()...)
 
 	return defs
 }

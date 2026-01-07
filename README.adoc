@@ -196,7 +196,7 @@ Source Code → Lexer → Tokens → Parser → AST → Evaluator → Result
 ** Context stack for procedure calls and let bindings
 
 * **Modular Core**: Core language procedures are organized into subpackages
-** Builtin: Arithmetic (`+`, `-`, `*`, `/`), Comparison (`=`, `<`, `>`), Conversion
+** Builtin: Arithmetic (`+`, `-`, `*`, `/`), Comparison (`=`, `<`, `>`), Conversion, I/O (`display`, `write`, `newline`)
 ** Math: `sqrt`, `expt`, `sin`, `cos`, `tan`, `floor`, `ceiling`, `round`, `log`
 ** Easily extensible with new modules
 

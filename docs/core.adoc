@@ -14,11 +14,12 @@ Each Go module in `pkg/core/` has a corresponding Scheme stub file in `core/` th
 ----
 pkg/core/
 ├── core.go             # Main entry point, aggregates all subpackages
-├── builtin/            # Builtin operations (aryth, cmp, conv)
+├── builtin/            # Builtin operations (aryth, cmp, conv, io)
 │   ├── builtin.go      # Aggregates builtin definitions
 │   ├── aryth.go        # Arithmetic operations
 │   ├── cmp.go          # Comparison operations
-│   └── conv.go         # Conversion operations
+│   ├── conv.go         # Conversion operations
+│   └── io.go           # I/O operations
 └── math/               # Mathematical operations
     └── math.go
 
@@ -26,7 +27,8 @@ core/                   # Scheme definition stubs
 ├── builtin/
 │   ├── aryth.scm       # Arithmetic stubs
 │   ├── cmp.scm         # Comparison stubs
-│   └── conv.scm        # Conversion stubs
+│   ├── conv.scm        # Conversion stubs
+│   └── io.scm          # I/O stubs
 └── math/
     └── math.scm        # Math stubs
 ----
@@ -203,6 +205,25 @@ The `builtin` subpackage provides core operations: arithmetic, comparison, and c
 | Character to Unicode code point
 |===
 
+=== I/O Operations (io.go)
+
+[cols="1,1,3"]
+|===
+| Name | Arity | Description
+
+| `display`
+| 1
+| Print object to stdout (strings without quotes)
+
+| `write`
+| 1
+| Print object to stdout (strings with quotes)
+
+| `newline`
+| 0
+| Print newline to stdout
+|===
+
 == Math Subpackage
 
 See link:math.adoc[Math Package Documentation] for full details.
@@ -252,6 +273,16 @@ See link:math.adoc[Math Package Documentation] for full details.
 (symbol->string 'hello)    ; => "hello"
 (string->list "abc")       ; => ("a" "b" "c")
 (list->string '("a" "b"))  ; => "ab"
+----
+
+=== I/O
+
+[source,scheme]
+----
+(display "Hello, World!")  ; prints: Hello, World!
+(newline)                  ; prints newline
+(display 42)               ; prints: 42
+(write "hello")            ; prints: "hello" (with quotes)
 ----
 
 == Creating New Core Modules
