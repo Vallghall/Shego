@@ -263,3 +263,51 @@ func NewQuoteNode(tok lex.Token, value Node) *QuoteNode {
 		Value:    value,
 	}
 }
+
+// QuasiquoteNode represents a (quasiquote expr) or `expr expression.
+type QuasiquoteNode struct {
+	baseNode
+	Value Node
+}
+
+func (*QuasiquoteNode) node() {}
+
+// NewQuasiquoteNode creates a new QuasiquoteNode.
+func NewQuasiquoteNode(tok lex.Token, value Node) *QuasiquoteNode {
+	return &QuasiquoteNode{
+		baseNode: baseNode{token: tok},
+		Value:    value,
+	}
+}
+
+// UnquoteNode represents a (unquote expr) or ,expr expression.
+type UnquoteNode struct {
+	baseNode
+	Value Node
+}
+
+func (*UnquoteNode) node() {}
+
+// NewUnquoteNode creates a new UnquoteNode.
+func NewUnquoteNode(tok lex.Token, value Node) *UnquoteNode {
+	return &UnquoteNode{
+		baseNode: baseNode{token: tok},
+		Value:    value,
+	}
+}
+
+// UnquoteSplicingNode represents a (unquote-splicing expr) or ,@expr expression.
+type UnquoteSplicingNode struct {
+	baseNode
+	Value Node
+}
+
+func (*UnquoteSplicingNode) node() {}
+
+// NewUnquoteSplicingNode creates a new UnquoteSplicingNode.
+func NewUnquoteSplicingNode(tok lex.Token, value Node) *UnquoteSplicingNode {
+	return &UnquoteSplicingNode{
+		baseNode: baseNode{token: tok},
+		Value:    value,
+	}
+}

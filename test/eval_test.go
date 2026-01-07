@@ -425,3 +425,384 @@ func TestSchemePrograms(t *testing.T) {
 		expectNumber(t, result, 15)
 	})
 }
+
+func TestEvalQuote(t *testing.T) {
+	t.Run("QuoteSymbol", func(t *testing.T) {
+		result, state := evalProgram(t, "'foo")
+		sym, err := mem.AsSymbol(result)
+		require.NoError(t, err)
+		name, ok := state.Pool().Resolve(sym.ID())
+		require.True(t, ok)
+		require.Equal(t, "foo", name)
+	})
+
+	t.Run("QuoteNumber", func(t *testing.T) {
+		result, _ := evalProgram(t, "'42")
+		expectNumber(t, result, 42)
+	})
+
+	t.Run("QuoteString", func(t *testing.T) {
+		result, _ := evalProgram(t, `'"hello"`)
+		str, err := mem.AsString(result)
+		require.NoError(t, err)
+		require.Equal(t, "hello", str.Value())
+	})
+
+	t.Run("QuoteList", func(t *testing.T) {
+		result, _ := evalProgram(t, "'(1 2 3)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		expectNumber(t, items[0], 1)
+		expectNumber(t, items[1], 2)
+		expectNumber(t, items[2], 3)
+	})
+
+	t.Run("QuoteEmptyList", func(t *testing.T) {
+		result, _ := evalProgram(t, "'()")
+		require.Equal(t, mem.Nil, result)
+	})
+
+	t.Run("QuoteLongForm", func(t *testing.T) {
+		result, state := evalProgram(t, "(quote foo)")
+		sym, err := mem.AsSymbol(result)
+		require.NoError(t, err)
+		name, ok := state.Pool().Resolve(sym.ID())
+		require.True(t, ok)
+		require.Equal(t, "foo", name)
+	})
+
+	t.Run("QuoteNestedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "'((1 2) (3 4))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		// Each item should be a list
+		inner1, err := mem.ListToSlice(items[0])
+		require.NoError(t, err)
+		require.Len(t, inner1, 2)
+		inner2, err := mem.ListToSlice(items[1])
+		require.NoError(t, err)
+		require.Len(t, inner2, 2)
+	})
+
+	t.Run("QuotePreservesSymbols", func(t *testing.T) {
+		result, state := evalProgram(t, "'(a b c)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		// All should be symbols
+		for i, item := range items {
+			sym, err := mem.AsSymbol(item)
+			require.NoError(t, err, "item %d should be a symbol", i)
+			_ = sym
+		}
+		sym0, _ := mem.AsSymbol(items[0])
+		name, ok := state.Pool().Resolve(sym0.ID())
+		require.True(t, ok)
+		require.Equal(t, "a", name)
+	})
+}
+
+func TestEvalQuasiquote(t *testing.T) {
+	t.Run("QuasiquoteSimple", func(t *testing.T) {
+		result, _ := evalProgram(t, "`(1 2 3)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		expectNumber(t, items[0], 1)
+		expectNumber(t, items[1], 2)
+		expectNumber(t, items[2], 3)
+	})
+
+	t.Run("QuasiquoteWithUnquote", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 42)
+			` + "`(a ,x b)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		// First and third are symbols, second is number
+		expectNumber(t, items[1], 42)
+	})
+
+	t.Run("QuasiquoteWithUnquoteExpression", func(t *testing.T) {
+		result, _ := evalProgram(t, "`(result is ,(+ 1 2))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		expectNumber(t, items[2], 3)
+	})
+
+	t.Run("QuasiquoteLongForm", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 5)
+			(quasiquote (a (unquote x) c))
+		`)
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		expectNumber(t, items[1], 5)
+	})
+
+	t.Run("QuasiquoteMultipleUnquotes", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 1)
+			(define y 2)
+			` + "`(,x ,y)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		expectNumber(t, items[0], 1)
+		expectNumber(t, items[1], 2)
+	})
+}
+
+func TestEvalUnquoteSplicing(t *testing.T) {
+	t.Run("UnquoteSplicingBasic", func(t *testing.T) {
+		result, _ := evalProgram(t, "`(a ,@(list 1 2 3) b)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 5) // a, 1, 2, 3, b
+		expectNumber(t, items[1], 1)
+		expectNumber(t, items[2], 2)
+		expectNumber(t, items[3], 3)
+	})
+
+	t.Run("UnquoteSplicingWithVariable", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define nums (list 1 2 3))
+			` + "`(start ,@nums end)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 5) // start, 1, 2, 3, end
+		expectNumber(t, items[1], 1)
+		expectNumber(t, items[2], 2)
+		expectNumber(t, items[3], 3)
+	})
+
+	t.Run("UnquoteSplicingEmptyList", func(t *testing.T) {
+		result, _ := evalProgram(t, "`(a ,@(list) b)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2) // a, b - empty list disappears
+	})
+
+	t.Run("UnquoteSplicingMultiple", func(t *testing.T) {
+		result, _ := evalProgram(t, "`(,@(list 1 2) ,@(list 3 4))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 4) // 1, 2, 3, 4
+		expectNumber(t, items[0], 1)
+		expectNumber(t, items[1], 2)
+		expectNumber(t, items[2], 3)
+		expectNumber(t, items[3], 4)
+	})
+
+	t.Run("UnquoteSplicingLongForm", func(t *testing.T) {
+		result, _ := evalProgram(t, "(quasiquote (a (unquote-splicing (list 1 2)) b))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 4) // a, 1, 2, b
+	})
+
+	t.Run("UnquoteSplicingMixedWithUnquote", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 42)
+			(define xs (list 1 2))
+			` + "`(,x ,@xs)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3) // 42, 1, 2
+		expectNumber(t, items[0], 42)
+		expectNumber(t, items[1], 1)
+		expectNumber(t, items[2], 2)
+	})
+}
+
+func TestEvalNestedQuoting(t *testing.T) {
+	t.Run("DoubleQuote", func(t *testing.T) {
+		result, _ := evalProgram(t, "''foo")
+		// Result should be (quote foo) as a list
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		// First element should be symbol 'quote'
+		sym, err := mem.AsSymbol(items[0])
+		require.NoError(t, err)
+		_ = sym
+	})
+
+	t.Run("QuoteQuasiquote", func(t *testing.T) {
+		result, _ := evalProgram(t, "'`foo")
+		// Result should be (quasiquote foo) as a list
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+	})
+
+	t.Run("QuoteUnquote", func(t *testing.T) {
+		result, _ := evalProgram(t, "',x")
+		// Result should be (unquote x) as a list
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+	})
+
+	t.Run("QuoteUnquoteSplicing", func(t *testing.T) {
+		result, _ := evalProgram(t, "',@xs")
+		// Result should be (unquote-splicing xs) as a list
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+	})
+
+	t.Run("QuotedListWithQuotes", func(t *testing.T) {
+		result, _ := evalProgram(t, "'('a 'b)")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+		// Each item should be a (quote x) list
+		for _, item := range items {
+			require.True(t, mem.IsList(item))
+			inner, err := mem.ListToSlice(item)
+			require.NoError(t, err)
+			require.Len(t, inner, 2)
+		}
+	})
+}
+
+func TestEvalQuotingWithListOps(t *testing.T) {
+	t.Run("CarOfQuotedList", func(t *testing.T) {
+		result, state := evalProgram(t, "(car '(a b c))")
+		sym, err := mem.AsSymbol(result)
+		require.NoError(t, err)
+		name, ok := state.Pool().Resolve(sym.ID())
+		require.True(t, ok)
+		require.Equal(t, "a", name)
+	})
+
+	t.Run("CdrOfQuotedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(cdr '(a b c))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 2)
+	})
+
+	t.Run("LengthOfQuotedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(length '(a b c d e))")
+		expectNumber(t, result, 5)
+	})
+
+	t.Run("AppendQuotedLists", func(t *testing.T) {
+		result, _ := evalProgram(t, "(append '(1 2) '(3 4))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 4)
+	})
+
+	t.Run("ReverseQuotedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(reverse '(1 2 3))")
+		require.True(t, mem.IsList(result))
+		items, err := mem.ListToSlice(result)
+		require.NoError(t, err)
+		require.Len(t, items, 3)
+		expectNumber(t, items[0], 3)
+		expectNumber(t, items[1], 2)
+		expectNumber(t, items[2], 1)
+	})
+
+	t.Run("NullOfQuotedEmptyList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(null? '())")
+		require.Equal(t, mem.True, result)
+	})
+
+	t.Run("NullOfQuotedNonEmptyList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(null? '(a))")
+		require.Equal(t, mem.False, result)
+	})
+
+	t.Run("PairOfQuotedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(pair? '(a b))")
+		require.Equal(t, mem.True, result)
+	})
+
+	t.Run("ListOfQuotedList", func(t *testing.T) {
+		result, _ := evalProgram(t, "(list? '(a b c))")
+		require.Equal(t, mem.True, result)
+	})
+}
+
+func TestEvalQuotingErrors(t *testing.T) {
+	t.Run("UnquoteOutsideQuasiquote", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize(",x")
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unquote outside of quasiquote")
+	})
+
+	t.Run("UnquoteSplicingOutsideQuasiquote", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize(",@xs")
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unquote-splicing outside of quasiquote")
+	})
+
+	t.Run("UnquoteSplicingNonList", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize("`(a ,@5 b)")
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unquote-splicing requires a list")
+	})
+}

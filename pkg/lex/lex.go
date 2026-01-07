@@ -43,11 +43,12 @@ func WithFile(file string) Option {
 }
 
 // New creates a new Lexer with the default chain of responsibility.
-// Chain order: Paren -> String -> Number -> Atom
+// Chain order: Paren -> Quote -> String -> Number -> Atom
 func New(opts ...Option) Lexer {
 	l := &lexer{
 		chain: BuildChain(
 			NewParenNode(),
+			NewQuoteLexNode(),
 			NewStringNode(),
 			NewNumberNode(),
 			NewAtomNode(),

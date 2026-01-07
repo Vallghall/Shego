@@ -23,6 +23,10 @@ func TestLexer(t *testing.T) {
 		testAtomTokens(t)
 	})
 
+	t.Run("QuoteTokens", func(t *testing.T) {
+		testQuoteTokens(t)
+	})
+
 	t.Run("MixedExpressions", func(t *testing.T) {
 		testMixedExpressions(t)
 	})
@@ -458,6 +462,172 @@ func testAtomTokens(t *testing.T) {
 				raw  string
 			}{
 				{lex.Atom, "set!"},
+			},
+		},
+	}
+
+	lexer := lex.New()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens, err := lexer.Tokenize(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(tokens) != len(tt.expected) {
+				t.Fatalf("expected %d tokens, got %d", len(tt.expected), len(tokens))
+			}
+			for i, exp := range tt.expected {
+				if tokens[i].Kind() != exp.kind {
+					t.Errorf("token %d: expected kind %v, got %v", i, exp.kind, tokens[i].Kind())
+				}
+				if tokens[i].Raw() != exp.raw {
+					t.Errorf("token %d: expected raw %q, got %q", i, exp.raw, tokens[i].Raw())
+				}
+			}
+		})
+	}
+}
+
+func testQuoteTokens(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			kind lex.TKind
+			raw  string
+		}
+	}{
+		{
+			name:  "single quote",
+			input: "'",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Quote, "'"},
+			},
+		},
+		{
+			name:  "backtick",
+			input: "`",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Backtick, "`"},
+			},
+		},
+		{
+			name:  "comma",
+			input: ",",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Comma, ","},
+			},
+		},
+		{
+			name:  "comma at",
+			input: ",@",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.CommaAt, ",@"},
+			},
+		},
+		{
+			name:  "quote with symbol",
+			input: "'foo",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Quote, "'"},
+				{lex.Atom, "foo"},
+			},
+		},
+		{
+			name:  "quote with list",
+			input: "'(1 2 3)",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Quote, "'"},
+				{lex.ParenOpen, "("},
+				{lex.Number, "1"},
+				{lex.Number, "2"},
+				{lex.Number, "3"},
+				{lex.ParenClose, ")"},
+			},
+		},
+		{
+			name:  "quasiquote with unquote",
+			input: "`(a ,x b)",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Backtick, "`"},
+				{lex.ParenOpen, "("},
+				{lex.Atom, "a"},
+				{lex.Comma, ","},
+				{lex.Atom, "x"},
+				{lex.Atom, "b"},
+				{lex.ParenClose, ")"},
+			},
+		},
+		{
+			name:  "quasiquote with unquote-splicing",
+			input: "`(a ,@xs b)",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Backtick, "`"},
+				{lex.ParenOpen, "("},
+				{lex.Atom, "a"},
+				{lex.CommaAt, ",@"},
+				{lex.Atom, "xs"},
+				{lex.Atom, "b"},
+				{lex.ParenClose, ")"},
+			},
+		},
+		{
+			name:  "nested quotes",
+			input: "''foo",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Quote, "'"},
+				{lex.Quote, "'"},
+				{lex.Atom, "foo"},
+			},
+		},
+		{
+			name:  "multiple quote types",
+			input: "'`foo",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Quote, "'"},
+				{lex.Backtick, "`"},
+				{lex.Atom, "foo"},
+			},
+		},
+		{
+			name:  "comma followed by non-at",
+			input: ",foo",
+			expected: []struct {
+				kind lex.TKind
+				raw  string
+			}{
+				{lex.Comma, ","},
+				{lex.Atom, "foo"},
 			},
 		},
 	}

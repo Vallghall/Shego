@@ -92,6 +92,12 @@ func (e *evaluator) EvalOne(node ast.Node) (mem.Object, error) {
 		return e.evalCond(n)
 	case *ast.QuoteNode:
 		return e.evalQuote(n)
+	case *ast.QuasiquoteNode:
+		return e.evalQuasiquote(n)
+	case *ast.UnquoteNode:
+		return nil, mem.NewRuntimeError("unquote outside of quasiquote")
+	case *ast.UnquoteSplicingNode:
+		return nil, mem.NewRuntimeError("unquote-splicing outside of quasiquote")
 	default:
 		return nil, fmt.Errorf("unknown AST node type: %T", node)
 	}
@@ -395,6 +401,85 @@ func (e *evaluator) evalQuote(n *ast.QuoteNode) (mem.Object, error) {
 	return e.astToObject(n.Value)
 }
 
+func (e *evaluator) evalQuasiquote(n *ast.QuasiquoteNode) (mem.Object, error) {
+	// Convert AST to Scheme object, but evaluate unquote expressions
+	return e.quasiquoteToObject(n.Value)
+}
+
+// quasiquoteToObject converts an AST node to a Scheme object for quasiquote.
+// Unlike astToObject, this evaluates unquote expressions.
+func (e *evaluator) quasiquoteToObject(node ast.Node) (mem.Object, error) {
+	switch n := node.(type) {
+	case *ast.UnquoteNode:
+		// Evaluate the unquoted expression
+		return e.EvalOne(n.Value)
+	case *ast.UnquoteSplicingNode:
+		// unquote-splicing at top level is an error
+		return nil, mem.NewRuntimeError("unquote-splicing in non-list context")
+	case *ast.NumberNode:
+		var value float64
+		fmt.Sscanf(n.Value, "%f", &value)
+		return mem.NewNumber(value), nil
+	case *ast.StringNode:
+		return mem.NewString(n.Value), nil
+	case *ast.SymbolNode:
+		id := e.state.Intern(n.Name)
+		return mem.NewSymbol(id, e.state.Pool()), nil
+	case *ast.ListNode:
+		if len(n.Elements) == 0 {
+			return mem.Nil, nil
+		}
+		return e.quasiquoteList(n.Elements)
+	case *ast.CallNode:
+		// In quasiquote, a call node is just a list
+		// Combine operator and args into a single list
+		allElements := make([]ast.Node, 1+len(n.Args))
+		allElements[0] = n.Operator
+		copy(allElements[1:], n.Args)
+		return e.quasiquoteList(allElements)
+	case *ast.QuasiquoteNode:
+		// Nested quasiquote - just quote it
+		return e.astToObject(node)
+	case *ast.QuoteNode:
+		// Quote inside quasiquote - just quote it
+		return e.astToObject(node)
+	default:
+		return nil, mem.NewRuntimeError(fmt.Sprintf("cannot quasiquote: %T", node))
+	}
+}
+
+// quasiquoteList handles list elements, supporting unquote-splicing.
+func (e *evaluator) quasiquoteList(elements []ast.Node) (mem.Object, error) {
+	var result []mem.Object
+
+	for _, elem := range elements {
+		// Check if this element is unquote-splicing
+		if splice, ok := elem.(*ast.UnquoteSplicingNode); ok {
+			// Evaluate the spliced expression
+			value, err := e.EvalOne(splice.Value)
+			if err != nil {
+				return nil, err
+			}
+
+			// Convert to slice and append all elements
+			items, err := mem.ListToSlice(value)
+			if err != nil {
+				return nil, mem.NewRuntimeError("unquote-splicing requires a list")
+			}
+			result = append(result, items...)
+		} else {
+			// Regular element - process normally
+			obj, err := e.quasiquoteToObject(elem)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, obj)
+		}
+	}
+
+	return mem.SliceToList(result), nil
+}
+
 // astToObject converts an AST node to a Scheme object (for quote).
 func (e *evaluator) astToObject(node ast.Node) (mem.Object, error) {
 	switch n := node.(type) {
@@ -435,6 +520,38 @@ func (e *evaluator) astToObject(node ast.Node) (mem.Object, error) {
 			}
 		}
 		return mem.SliceToList(elements), nil
+	case *ast.QuoteNode:
+		// Nested quote - return as (quote value)
+		quoteSym := mem.NewSymbol(e.state.Intern("quote"), e.state.Pool())
+		value, err := e.astToObject(n.Value)
+		if err != nil {
+			return nil, err
+		}
+		return mem.SliceToList([]mem.Object{quoteSym, value}), nil
+	case *ast.QuasiquoteNode:
+		// Quasiquote in quote - return as (quasiquote value)
+		qqSym := mem.NewSymbol(e.state.Intern("quasiquote"), e.state.Pool())
+		value, err := e.astToObject(n.Value)
+		if err != nil {
+			return nil, err
+		}
+		return mem.SliceToList([]mem.Object{qqSym, value}), nil
+	case *ast.UnquoteNode:
+		// Unquote in quote - return as (unquote value)
+		uqSym := mem.NewSymbol(e.state.Intern("unquote"), e.state.Pool())
+		value, err := e.astToObject(n.Value)
+		if err != nil {
+			return nil, err
+		}
+		return mem.SliceToList([]mem.Object{uqSym, value}), nil
+	case *ast.UnquoteSplicingNode:
+		// Unquote-splicing in quote - return as (unquote-splicing value)
+		uqsSym := mem.NewSymbol(e.state.Intern("unquote-splicing"), e.state.Pool())
+		value, err := e.astToObject(n.Value)
+		if err != nil {
+			return nil, err
+		}
+		return mem.SliceToList([]mem.Object{uqsSym, value}), nil
 	default:
 		return nil, mem.NewRuntimeError(fmt.Sprintf("cannot quote: %T", node))
 	}

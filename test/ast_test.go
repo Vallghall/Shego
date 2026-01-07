@@ -48,6 +48,26 @@ func TestParser(t *testing.T) {
 		testQuoteExpression(t)
 	})
 
+	t.Run("QuotePrefixSyntax", func(t *testing.T) {
+		testQuotePrefixSyntax(t)
+	})
+
+	t.Run("QuasiquoteExpression", func(t *testing.T) {
+		testQuasiquoteExpression(t)
+	})
+
+	t.Run("UnquoteExpression", func(t *testing.T) {
+		testUnquoteExpression(t)
+	})
+
+	t.Run("UnquoteSplicingExpression", func(t *testing.T) {
+		testUnquoteSplicingExpression(t)
+	})
+
+	t.Run("NestedQuoting", func(t *testing.T) {
+		testNestedQuoting(t)
+	})
+
 	t.Run("FunctionCalls", func(t *testing.T) {
 		testFunctionCalls(t)
 	})
@@ -553,7 +573,354 @@ func getTypeName(n ast.Node) string {
 		return "*ast.CondNode"
 	case *ast.QuoteNode:
 		return "*ast.QuoteNode"
+	case *ast.QuasiquoteNode:
+		return "*ast.QuasiquoteNode"
+	case *ast.UnquoteNode:
+		return "*ast.UnquoteNode"
+	case *ast.UnquoteSplicingNode:
+		return "*ast.UnquoteSplicingNode"
 	default:
 		return "unknown"
 	}
+}
+
+func testQuotePrefixSyntax(t *testing.T) {
+	t.Run("quote prefix symbol", func(t *testing.T) {
+		nodes := parseString(t, "'foo")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		quoteNode, ok := nodes[0].(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected QuoteNode, got %T", nodes[0])
+		}
+		sym, ok := quoteNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in quote, got %T", quoteNode.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quote prefix list", func(t *testing.T) {
+		nodes := parseString(t, "'(1 2 3)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		quoteNode, ok := nodes[0].(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected QuoteNode, got %T", nodes[0])
+		}
+		// List inside quote is parsed as CallNode
+		_, ok = quoteNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Errorf("expected CallNode in quote, got %T", quoteNode.Value)
+		}
+	})
+
+	t.Run("quote prefix number", func(t *testing.T) {
+		nodes := parseString(t, "'42")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		quoteNode, ok := nodes[0].(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected QuoteNode, got %T", nodes[0])
+		}
+		numNode, ok := quoteNode.Value.(*ast.NumberNode)
+		if !ok {
+			t.Fatalf("expected NumberNode in quote, got %T", quoteNode.Value)
+		}
+		if numNode.Value != "42" {
+			t.Errorf("expected '42', got %q", numNode.Value)
+		}
+	})
+}
+
+func testQuasiquoteExpression(t *testing.T) {
+	t.Run("quasiquote long form", func(t *testing.T) {
+		nodes := parseString(t, "(quasiquote foo)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		qqNode, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected QuasiquoteNode, got %T", nodes[0])
+		}
+		sym, ok := qqNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in quasiquote, got %T", qqNode.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quasiquote prefix symbol", func(t *testing.T) {
+		nodes := parseString(t, "`foo")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		qqNode, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected QuasiquoteNode, got %T", nodes[0])
+		}
+		sym, ok := qqNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in quasiquote, got %T", qqNode.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quasiquote prefix list", func(t *testing.T) {
+		nodes := parseString(t, "`(a b c)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		qqNode, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected QuasiquoteNode, got %T", nodes[0])
+		}
+		_, ok = qqNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Errorf("expected CallNode in quasiquote, got %T", qqNode.Value)
+		}
+	})
+}
+
+func testUnquoteExpression(t *testing.T) {
+	t.Run("unquote long form", func(t *testing.T) {
+		nodes := parseString(t, "(unquote x)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqNode, ok := nodes[0].(*ast.UnquoteNode)
+		if !ok {
+			t.Fatalf("expected UnquoteNode, got %T", nodes[0])
+		}
+		sym, ok := uqNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote, got %T", uqNode.Value)
+		}
+		if sym.Name != "x" {
+			t.Errorf("expected 'x', got %q", sym.Name)
+		}
+	})
+
+	t.Run("unquote prefix symbol", func(t *testing.T) {
+		nodes := parseString(t, ",x")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqNode, ok := nodes[0].(*ast.UnquoteNode)
+		if !ok {
+			t.Fatalf("expected UnquoteNode, got %T", nodes[0])
+		}
+		sym, ok := uqNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote, got %T", uqNode.Value)
+		}
+		if sym.Name != "x" {
+			t.Errorf("expected 'x', got %q", sym.Name)
+		}
+	})
+
+	t.Run("unquote prefix expression", func(t *testing.T) {
+		nodes := parseString(t, ",(+ 1 2)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqNode, ok := nodes[0].(*ast.UnquoteNode)
+		if !ok {
+			t.Fatalf("expected UnquoteNode, got %T", nodes[0])
+		}
+		_, ok = uqNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Errorf("expected CallNode in unquote, got %T", uqNode.Value)
+		}
+	})
+}
+
+func testUnquoteSplicingExpression(t *testing.T) {
+	t.Run("unquote-splicing long form", func(t *testing.T) {
+		nodes := parseString(t, "(unquote-splicing xs)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqsNode, ok := nodes[0].(*ast.UnquoteSplicingNode)
+		if !ok {
+			t.Fatalf("expected UnquoteSplicingNode, got %T", nodes[0])
+		}
+		sym, ok := uqsNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote-splicing, got %T", uqsNode.Value)
+		}
+		if sym.Name != "xs" {
+			t.Errorf("expected 'xs', got %q", sym.Name)
+		}
+	})
+
+	t.Run("unquote-splicing prefix symbol", func(t *testing.T) {
+		nodes := parseString(t, ",@xs")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqsNode, ok := nodes[0].(*ast.UnquoteSplicingNode)
+		if !ok {
+			t.Fatalf("expected UnquoteSplicingNode, got %T", nodes[0])
+		}
+		sym, ok := uqsNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote-splicing, got %T", uqsNode.Value)
+		}
+		if sym.Name != "xs" {
+			t.Errorf("expected 'xs', got %q", sym.Name)
+		}
+	})
+
+	t.Run("unquote-splicing prefix expression", func(t *testing.T) {
+		nodes := parseString(t, ",@(list 1 2)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		uqsNode, ok := nodes[0].(*ast.UnquoteSplicingNode)
+		if !ok {
+			t.Fatalf("expected UnquoteSplicingNode, got %T", nodes[0])
+		}
+		_, ok = uqsNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Errorf("expected CallNode in unquote-splicing, got %T", uqsNode.Value)
+		}
+	})
+}
+
+func testNestedQuoting(t *testing.T) {
+	t.Run("double quote", func(t *testing.T) {
+		nodes := parseString(t, "''foo")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		outerQuote, ok := nodes[0].(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected outer QuoteNode, got %T", nodes[0])
+		}
+		innerQuote, ok := outerQuote.Value.(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected inner QuoteNode, got %T", outerQuote.Value)
+		}
+		sym, ok := innerQuote.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode, got %T", innerQuote.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quote then quasiquote", func(t *testing.T) {
+		nodes := parseString(t, "'`foo")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		outerQuote, ok := nodes[0].(*ast.QuoteNode)
+		if !ok {
+			t.Fatalf("expected outer QuoteNode, got %T", nodes[0])
+		}
+		innerQQ, ok := outerQuote.Value.(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected inner QuasiquoteNode, got %T", outerQuote.Value)
+		}
+		sym, ok := innerQQ.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode, got %T", innerQQ.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quasiquote with unquote inside", func(t *testing.T) {
+		nodes := parseString(t, "`(a ,x b)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		qqNode, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected QuasiquoteNode, got %T", nodes[0])
+		}
+		call, ok := qqNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Fatalf("expected CallNode in quasiquote, got %T", qqNode.Value)
+		}
+		// The second argument should be an UnquoteNode
+		if len(call.Args) < 2 {
+			t.Fatalf("expected at least 2 args, got %d", len(call.Args))
+		}
+		uqNode, ok := call.Args[0].(*ast.UnquoteNode)
+		if !ok {
+			t.Fatalf("expected UnquoteNode as first arg, got %T", call.Args[0])
+		}
+		sym, ok := uqNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote, got %T", uqNode.Value)
+		}
+		if sym.Name != "x" {
+			t.Errorf("expected 'x', got %q", sym.Name)
+		}
+	})
+
+	t.Run("quasiquote with unquote-splicing inside", func(t *testing.T) {
+		nodes := parseString(t, "`(a ,@xs b)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		qqNode, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected QuasiquoteNode, got %T", nodes[0])
+		}
+		call, ok := qqNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Fatalf("expected CallNode in quasiquote, got %T", qqNode.Value)
+		}
+		// The second argument should be an UnquoteSplicingNode
+		if len(call.Args) < 2 {
+			t.Fatalf("expected at least 2 args, got %d", len(call.Args))
+		}
+		uqsNode, ok := call.Args[0].(*ast.UnquoteSplicingNode)
+		if !ok {
+			t.Fatalf("expected UnquoteSplicingNode as first arg, got %T", call.Args[0])
+		}
+		sym, ok := uqsNode.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode in unquote-splicing, got %T", uqsNode.Value)
+		}
+		if sym.Name != "xs" {
+			t.Errorf("expected 'xs', got %q", sym.Name)
+		}
+	})
+
+	t.Run("nested quasiquote", func(t *testing.T) {
+		nodes := parseString(t, "``foo")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		outerQQ, ok := nodes[0].(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected outer QuasiquoteNode, got %T", nodes[0])
+		}
+		innerQQ, ok := outerQQ.Value.(*ast.QuasiquoteNode)
+		if !ok {
+			t.Fatalf("expected inner QuasiquoteNode, got %T", outerQQ.Value)
+		}
+		sym, ok := innerQQ.Value.(*ast.SymbolNode)
+		if !ok {
+			t.Fatalf("expected SymbolNode, got %T", innerQQ.Value)
+		}
+		if sym.Name != "foo" {
+			t.Errorf("expected 'foo', got %q", sym.Name)
+		}
+	})
 }

@@ -6,13 +6,16 @@ import (
 
 // specialKeywords maps keyword names to their handlers
 var specialKeywords = map[string]bool{
-	"if":     true,
-	"begin":  true,
-	"define": true,
-	"lambda": true,
-	"let":    true,
-	"cond":   true,
-	"quote":  true,
+	"if":               true,
+	"begin":            true,
+	"define":           true,
+	"lambda":           true,
+	"let":              true,
+	"cond":             true,
+	"quote":            true,
+	"quasiquote":       true,
+	"unquote":          true,
+	"unquote-splicing": true,
 }
 
 // SpecialFormsNode handles special form expressions.
@@ -106,6 +109,12 @@ func (s *SpecialFormsNode) transform(openParen lex.Token, keyword string, elemen
 		return s.parseCond(openParen, elements)
 	case "quote":
 		return s.parseQuote(openParen, elements)
+	case "quasiquote":
+		return s.parseQuasiquote(openParen, elements)
+	case "unquote":
+		return s.parseUnquote(openParen, elements)
+	case "unquote-splicing":
+		return s.parseUnquoteSplicing(openParen, elements)
 	default:
 		return nil, false
 	}
@@ -291,4 +300,28 @@ func (s *SpecialFormsNode) parseQuote(tok lex.Token, elements []Node) (Node, boo
 		return nil, false
 	}
 	return NewQuoteNode(tok, elements[0]), true
+}
+
+// parseQuasiquote handles (quasiquote expr) expressions.
+func (s *SpecialFormsNode) parseQuasiquote(tok lex.Token, elements []Node) (Node, bool) {
+	if len(elements) != 1 {
+		return nil, false
+	}
+	return NewQuasiquoteNode(tok, elements[0]), true
+}
+
+// parseUnquote handles (unquote expr) expressions.
+func (s *SpecialFormsNode) parseUnquote(tok lex.Token, elements []Node) (Node, bool) {
+	if len(elements) != 1 {
+		return nil, false
+	}
+	return NewUnquoteNode(tok, elements[0]), true
+}
+
+// parseUnquoteSplicing handles (unquote-splicing expr) expressions.
+func (s *SpecialFormsNode) parseUnquoteSplicing(tok lex.Token, elements []Node) (Node, bool) {
+	if len(elements) != 1 {
+		return nil, false
+	}
+	return NewUnquoteSplicingNode(tok, elements[0]), true
 }

@@ -9,6 +9,10 @@ const (
 	String
 	Number
 	Atom
+	Quote    // '
+	Backtick // `
+	Comma    // ,
+	CommaAt  // ,@
 )
 
 // String returns a human-readable name for the token kind.
@@ -24,6 +28,14 @@ func (k TKind) String() string {
 		return "Number"
 	case Atom:
 		return "Atom"
+	case Quote:
+		return "Quote"
+	case Backtick:
+		return "Backtick"
+	case Comma:
+		return "Comma"
+	case CommaAt:
+		return "CommaAt"
 	default:
 		return "Unknown"
 	}

@@ -39,18 +39,21 @@ func New() Parser {
 	p := &parser{}
 
 	// Create the nodes
+	quotePrefix := NewQuotePrefixNode()
 	specialForms := NewSpecialFormsNode()
 	listNode := NewListParseNode()
 	atomNode := NewAtomParseNode()
 
-	// Build the chain: SpecialForms -> List -> Atom
+	// Build the chain: QuotePrefix -> SpecialForms -> List -> Atom
 	p.chain = BuildParseChain(
+		quotePrefix,
 		specialForms,
 		listNode,
 		atomNode,
 	)
 
 	// Set the chain references for recursive parsing
+	quotePrefix.SetChain(p.chain)
 	specialForms.SetChain(p.chain)
 	listNode.SetChain(p.chain)
 
