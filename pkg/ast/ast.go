@@ -183,6 +183,24 @@ func NewDefineFuncNode(tok lex.Token, name *SymbolNode, params []*SymbolNode, bo
 	}
 }
 
+// SetNode represents a (set! name value) expression for mutating existing bindings.
+type SetNode struct {
+	baseNode
+	Name  *SymbolNode
+	Value Node
+}
+
+func (*SetNode) node() {}
+
+// NewSetNode creates a new SetNode.
+func NewSetNode(tok lex.Token, name *SymbolNode, value Node) *SetNode {
+	return &SetNode{
+		baseNode: baseNode{token: tok},
+		Name:     name,
+		Value:    value,
+	}
+}
+
 // LambdaNode represents a (lambda (params) body) expression.
 type LambdaNode struct {
 	baseNode

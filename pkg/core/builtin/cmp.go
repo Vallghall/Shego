@@ -18,6 +18,9 @@ func CmpDefinitions() []mem.Definition {
 		{Name: "eq?", Value: mem.NewPrimitive("eq?", 2, isEq)},
 		{Name: "equal?", Value: mem.NewPrimitive("equal?", 2, isEqual)},
 		{Name: "not", Value: mem.NewPrimitive("not", 1, not)},
+		{Name: "or", Value: mem.NewVariadicPrimitive("or", logicalOr)},
+		{Name: "and", Value: mem.NewVariadicPrimitive("and", logicalAnd)},
+		{Name: "xor", Value: mem.NewVariadicPrimitive("xor", logicalXor)},
 	}
 }
 
@@ -202,4 +205,45 @@ func isEqual(args []mem.Object) (mem.Object, error) {
 // not implements (not x) - boolean negation.
 func not(args []mem.Object) (mem.Object, error) {
 	return mem.Boolean(!args[0].IsTruthy()), nil
+}
+
+// logicalOr implements (or x1 x2 ...) - returns first truthy value, or #f if all are false.
+func logicalOr(args []mem.Object) (mem.Object, error) {
+	for _, arg := range args {
+		if arg.IsTruthy() {
+			return arg, nil
+		}
+	}
+	return mem.False, nil
+}
+
+// logicalAnd implements (and x1 x2 ...) - returns last value if all are truthy, or #f if any is false.
+func logicalAnd(args []mem.Object) (mem.Object, error) {
+	if len(args) == 0 {
+		return mem.True, nil
+	}
+
+	for _, arg := range args {
+		if !arg.IsTruthy() {
+			return mem.False, nil
+		}
+	}
+	// All are truthy, return the last one
+	return args[len(args)-1], nil
+}
+
+// logicalXor implements (xor x1 x2 ...) - returns #t if exactly one argument is truthy, #f otherwise.
+func logicalXor(args []mem.Object) (mem.Object, error) {
+	if len(args) < 2 {
+		return nil, mem.NewArityAtLeastError("xor", 2, len(args))
+	}
+
+	truthyCount := 0
+	for _, arg := range args {
+		if arg.IsTruthy() {
+			truthyCount++
+		}
+	}
+
+	return mem.Boolean(truthyCount == 1), nil
 }

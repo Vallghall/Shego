@@ -364,9 +364,10 @@ func TestEvalBegin(t *testing.T) {
 	t.Run("BeginWithSideEffects", func(t *testing.T) {
 		result, _ := evalProgram(t, `
 			(define x 0)
+			(define y 0)
 			(begin
-				(define x 10)
-				(define y 20)
+				(set! x 10)
+				(set! y 20)
 				(+ x y))
 		`)
 		expectNumber(t, result, 30)
@@ -423,6 +424,139 @@ func TestSchemePrograms(t *testing.T) {
 			(average 10 20)
 		`)
 		expectNumber(t, result, 15)
+	})
+}
+
+func TestEvalSet(t *testing.T) {
+	t.Run("SetSimple", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 10)
+			(set! x 20)
+			x
+		`)
+		expectNumber(t, result, 20)
+	})
+
+	t.Run("SetMultipleTimes", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 1)
+			(set! x 2)
+			(set! x 3)
+			(set! x 4)
+			x
+		`)
+		expectNumber(t, result, 4)
+	})
+
+	t.Run("SetWithExpression", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 10)
+			(set! x (+ x 5))
+			x
+		`)
+		expectNumber(t, result, 15)
+	})
+
+	t.Run("SetInNestedScope", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 10)
+			(let ((y 5))
+				(set! x (+ x y)))
+			x
+		`)
+		expectNumber(t, result, 15)
+	})
+
+	t.Run("SetInLambda", func(t *testing.T) {
+		// Test that set! works when called from within a function
+		result, _ := evalProgram(t, `
+			(define counter 0)
+			(define (inc) (set! counter (+ counter 1)))
+			(inc)
+			(inc)
+			(inc)
+			counter
+		`)
+		expectNumber(t, result, 3)
+	})
+
+	t.Run("SetUndefinedError", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize("(set! undefined-var 42)")
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unbound variable")
+	})
+}
+
+func TestEvalRedefinitionError(t *testing.T) {
+	t.Run("RedefineSameScope", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize(`
+			(define x 10)
+			(define x 20)
+		`)
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot redefine variable")
+	})
+
+	t.Run("DefineShadowInLet", func(t *testing.T) {
+		// Shadowing in a new scope should be allowed
+		result, _ := evalProgram(t, `
+			(define x 10)
+			(let ((x 20))
+				x)
+		`)
+		expectNumber(t, result, 20)
+	})
+
+	t.Run("OriginalValuePreserved", func(t *testing.T) {
+		result, _ := evalProgram(t, `
+			(define x 10)
+			(let ((x 20))
+				x)
+			x
+		`)
+		expectNumber(t, result, 10)
+	})
+
+	t.Run("RedefineFunctionError", func(t *testing.T) {
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize(`
+			(define (f x) x)
+			(define (f x) (* x 2))
+		`)
+		require.NoError(t, err)
+
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		require.NoError(t, err)
+
+		evaluator, err := eval.New()
+		require.NoError(t, err)
+
+		_, err = evaluator.Eval(nodes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot redefine variable")
 	})
 }
 

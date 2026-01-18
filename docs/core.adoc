@@ -168,6 +168,18 @@ The `builtin` subpackage provides core operations: arithmetic, comparison, and c
 | `not`
 | 1
 | Boolean negation
+
+| `or`
+| variadic
+| Returns first truthy value, or #f if all false
+
+| `and`
+| variadic
+| Returns last value if all truthy, #f otherwise
+
+| `xor`
+| 2+
+| Returns #t if exactly one argument is truthy
 |===
 
 === Conversion Operations (conv.go)
@@ -260,6 +272,12 @@ See link:math.adoc[Math Package Documentation] for full details.
 (positive? 5)        ; => #t
 (negative? -5)       ; => #t
 (not #f)             ; => #t
+(or #f #f 42)        ; => 42
+(or #f #f)            ; => #f
+(and #t #t 5)         ; => 5
+(and #t #f)           ; => #f
+(xor #t #f)           ; => #t
+(xor #t #t)           ; => #f
 (eq? 'a 'a)          ; => #t
 (equal? '(1 2) '(1 2)) ; => #t
 ----
@@ -396,4 +414,5 @@ Operations follow Scheme semantics:
 * Only `#f` is falsy
 * Empty list `()` is truthy
 * `modulo` follows Scheme sign conventions
+
 

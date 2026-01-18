@@ -84,6 +84,8 @@ func (e *evaluator) EvalOne(node ast.Node) (mem.Object, error) {
 		return e.evalBegin(n)
 	case *ast.DefineNode:
 		return e.evalDefine(n)
+	case *ast.SetNode:
+		return e.evalSet(n)
 	case *ast.LambdaNode:
 		return e.evalLambda(n)
 	case *ast.LetNode:
@@ -301,6 +303,23 @@ func (e *evaluator) evalDefine(n *ast.DefineNode) (mem.Object, error) {
 		if err := e.state.Define(nameID, proc); err != nil {
 			return nil, err
 		}
+	}
+
+	return mem.Void, nil
+}
+
+func (e *evaluator) evalSet(n *ast.SetNode) (mem.Object, error) {
+	nameID := e.state.Intern(n.Name.Name)
+
+	// Evaluate the new value
+	value, err := e.EvalOne(n.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the binding (this will error if not defined)
+	if err := e.state.Set(nameID, value); err != nil {
+		return nil, err
 	}
 
 	return mem.Void, nil

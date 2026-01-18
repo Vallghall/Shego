@@ -9,6 +9,7 @@ var specialKeywords = map[string]bool{
 	"if":               true,
 	"begin":            true,
 	"define":           true,
+	"set!":             true,
 	"lambda":           true,
 	"let":              true,
 	"cond":             true,
@@ -101,6 +102,8 @@ func (s *SpecialFormsNode) transform(openParen lex.Token, keyword string, elemen
 		return s.parseBegin(openParen, elements)
 	case "define":
 		return s.parseDefine(openParen, elements)
+	case "set!":
+		return s.parseSet(openParen, elements)
 	case "lambda":
 		return s.parseLambda(openParen, elements)
 	case "let":
@@ -189,7 +192,8 @@ func (s *SpecialFormsNode) parseDefine(tok lex.Token, elements []Node) (Node, bo
 		return nil, false
 	}
 
-	var params []*SymbolNode
+	// Initialize params as empty slice (not nil) to distinguish from simple define
+	params := make([]*SymbolNode, 0, len(nameElements)-1)
 	for _, elem := range nameElements[1:] {
 		param, ok := elem.(*SymbolNode)
 		if !ok {
@@ -204,6 +208,21 @@ func (s *SpecialFormsNode) parseDefine(tok lex.Token, elements []Node) (Node, bo
 	}
 
 	return NewDefineFuncNode(tok, funcName, params, body), true
+}
+
+// parseSet handles (set! name value) expressions.
+func (s *SpecialFormsNode) parseSet(tok lex.Token, elements []Node) (Node, bool) {
+	// elements: [name, value]
+	if len(elements) != 2 {
+		return nil, false
+	}
+
+	name, ok := elements[0].(*SymbolNode)
+	if !ok {
+		return nil, false
+	}
+
+	return NewSetNode(tok, name, elements[1]), true
 }
 
 // parseLambda handles (lambda (params) body) expressions.

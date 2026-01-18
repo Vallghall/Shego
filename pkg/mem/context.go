@@ -8,8 +8,8 @@ import (
 // It maps symbolic atoms to objects and supports nested scopes.
 type Context interface {
 	// Define creates a new binding in this context.
-	// If the name already exists in this immediate context, it is overwritten.
-	// Returns an error if the binding cannot be created.
+	// Returns an error if the name already exists in this immediate context,
+	// or if the binding cannot be created.
 	Define(name atom.ID, value Object) error
 
 	// Lookup finds a binding by searching this context and parent scopes.
@@ -31,6 +31,9 @@ type Context interface {
 
 	// Names returns all names defined in this immediate context.
 	Names() []atom.ID
+
+	// SetPool sets the atom pool for error messages.
+	SetPool(pool *atom.Pool)
 }
 
 // =============================================================================
@@ -41,6 +44,7 @@ type Context interface {
 type MapContext struct {
 	bindings map[atom.ID]Object
 	parent   Context
+	pool     *atom.Pool
 }
 
 // NewContext creates a new top-level context with no parent.
@@ -53,19 +57,35 @@ func NewContext() *MapContext {
 
 // NewChildContext creates a new context with the given parent.
 func NewChildContext(parent Context) *MapContext {
-	return &MapContext{
+	ctx := &MapContext{
 		bindings: make(map[atom.ID]Object),
 		parent:   parent,
 	}
+	// Inherit pool from parent if available
+	if mapParent, ok := parent.(*MapContext); ok && mapParent.pool != nil {
+		ctx.pool = mapParent.pool
+	}
+	return ctx
 }
 
-// Define creates or overwrites a binding in this context.
+// SetPool sets the atom pool for error messages.
+func (c *MapContext) SetPool(pool *atom.Pool) {
+	c.pool = pool
+}
+
+// Define creates a new binding in this context.
+// Returns an error if the name already exists in this immediate context.
 func (c *MapContext) Define(name atom.ID, value Object) error {
 	if value == nil {
 		return &BindingError{
 			Name:    name,
+			Pool:    c.pool,
 			Message: "cannot bind nil value",
 		}
+	}
+	// Check for redefinition in the same scope
+	if _, exists := c.bindings[name]; exists {
+		return NewRedefinitionError(name, c.pool)
 	}
 	c.bindings[name] = value
 	return nil

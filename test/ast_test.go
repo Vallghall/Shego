@@ -32,6 +32,10 @@ func TestParser(t *testing.T) {
 		testDefineExpression(t)
 	})
 
+	t.Run("SetExpression", func(t *testing.T) {
+		testSetExpression(t)
+	})
+
 	t.Run("LambdaExpression", func(t *testing.T) {
 		testLambdaExpression(t)
 	})
@@ -339,6 +343,40 @@ func testDefineExpression(t *testing.T) {
 	})
 }
 
+func testSetExpression(t *testing.T) {
+	t.Run("simple set", func(t *testing.T) {
+		nodes := parseString(t, "(set! x 42)")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		setNode, ok := nodes[0].(*ast.SetNode)
+		if !ok {
+			t.Fatalf("expected SetNode, got %T", nodes[0])
+		}
+		if setNode.Name.Name != "x" {
+			t.Errorf("expected name 'x', got %q", setNode.Name.Name)
+		}
+	})
+
+	t.Run("set with expression", func(t *testing.T) {
+		nodes := parseString(t, "(set! x (+ 1 2))")
+		if len(nodes) != 1 {
+			t.Fatalf("expected 1 node, got %d", len(nodes))
+		}
+		setNode, ok := nodes[0].(*ast.SetNode)
+		if !ok {
+			t.Fatalf("expected SetNode, got %T", nodes[0])
+		}
+		if setNode.Name.Name != "x" {
+			t.Errorf("expected name 'x', got %q", setNode.Name.Name)
+		}
+		_, ok = setNode.Value.(*ast.CallNode)
+		if !ok {
+			t.Errorf("expected CallNode value, got %T", setNode.Value)
+		}
+	})
+}
+
 func testLambdaExpression(t *testing.T) {
 	t.Run("lambda with no params", func(t *testing.T) {
 		nodes := parseString(t, "(lambda () 42)")
@@ -565,6 +603,8 @@ func getTypeName(n ast.Node) string {
 		return "*ast.BeginNode"
 	case *ast.DefineNode:
 		return "*ast.DefineNode"
+	case *ast.SetNode:
+		return "*ast.SetNode"
 	case *ast.LambdaNode:
 		return "*ast.LambdaNode"
 	case *ast.LetNode:

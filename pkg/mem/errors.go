@@ -56,6 +56,26 @@ func (e *BindingError) Error() string {
 	return fmt.Sprintf("binding error for %s: %s", nameStr, e.Message)
 }
 
+// RedefinitionError indicates an attempt to redefine an existing variable.
+type RedefinitionError struct {
+	Name atom.ID
+	Pool *atom.Pool
+}
+
+func (e *RedefinitionError) Error() string {
+	if e.Pool != nil {
+		if name, ok := e.Pool.Resolve(e.Name); ok {
+			return fmt.Sprintf("cannot redefine variable: %s", name)
+		}
+	}
+	return fmt.Sprintf("cannot redefine variable: #<atom:%d>", e.Name)
+}
+
+// NewRedefinitionError creates a redefinition error.
+func NewRedefinitionError(name atom.ID, pool *atom.Pool) *RedefinitionError {
+	return &RedefinitionError{Name: name, Pool: pool}
+}
+
 // ArityError indicates wrong number of arguments.
 type ArityError struct {
 	Name     string // Procedure name (if known)

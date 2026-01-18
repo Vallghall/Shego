@@ -18,6 +18,7 @@ type State struct {
 func NewState() *State {
 	pool := atom.NewPool()
 	global := mem.NewContext()
+	global.SetPool(pool)
 	return &State{
 		pool:    pool,
 		global:  global,
@@ -28,6 +29,7 @@ func NewState() *State {
 // NewStateWithPool creates a new interpreter state using an existing atom pool.
 func NewStateWithPool(pool *atom.Pool) *State {
 	global := mem.NewContext()
+	global.SetPool(pool)
 	return &State{
 		pool:    pool,
 		global:  global,

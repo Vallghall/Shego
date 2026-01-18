@@ -69,3 +69,22 @@
 (define not
   "Implemented in Go: boolean negation.")
 
+;;; Logical OR
+;;; (or x1 x2 ...) -> value
+;;; Returns the first truthy value, or #f if all arguments are false.
+(define or
+  "Implemented in Go: returns first truthy value or #f.")
+
+;;; Logical AND
+;;; (and x1 x2 ...) -> value
+;;; Returns the last value if all arguments are truthy, or #f if any is false.
+(define and
+  "Implemented in Go: returns last value if all truthy, #f otherwise.")
+
+;;; Logical XOR
+;;; (xor x1 x2 ...) -> boolean
+;;; Returns #t if exactly one argument is truthy, #f otherwise.
+;;; Requires at least 2 arguments.
+(define xor
+  "Implemented in Go: returns #t if exactly one argument is truthy.")
+
