@@ -2,10 +2,14 @@ package eval
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/Vallghall/schego/pkg/ast"
 	"github.com/Vallghall/schego/pkg/atom"
 	"github.com/Vallghall/schego/pkg/core"
+	"github.com/Vallghall/schego/pkg/core/builtin"
+	"github.com/Vallghall/schego/pkg/lex"
 	"github.com/Vallghall/schego/pkg/mem"
 )
 
@@ -33,9 +37,24 @@ func New() (Evaluator, error) {
 	if err := state.LoadBuiltins(core.All); err != nil {
 		return nil, fmt.Errorf("failed to load builtins: %w", err)
 	}
-	return &evaluator{
+
+	// Create evaluator
+	eval := &evaluator{
 		state: state,
-	}, nil
+	}
+
+	// Register eval, apply, and load primitives (these need evaluator access)
+	if err := eval.registerEvalPrimitives(); err != nil {
+		return nil, fmt.Errorf("failed to register eval primitives: %w", err)
+	}
+
+	// Load functional.scm (map, filter, fold) before eval/apply are available
+	// We need to load it directly using Go code
+	if err := eval.loadFunctionalLibrary(); err != nil {
+		return nil, fmt.Errorf("failed to load functional library: %w", err)
+	}
+
+	return eval, nil
 }
 
 // NewWithState creates a new Evaluator with the given state.
@@ -574,4 +593,166 @@ func (e *evaluator) astToObject(node ast.Node) (mem.Object, error) {
 	default:
 		return nil, mem.NewRuntimeError(fmt.Sprintf("cannot quote: %T", node))
 	}
+}
+
+// objectToAST converts a Scheme object to an AST node (for eval).
+func (e *evaluator) objectToAST(obj mem.Object) (ast.Node, error) {
+	switch obj.Type() {
+	case mem.TypeNumber:
+		num := obj.(*mem.Number)
+		// Create a token for the number
+		tok := lex.NewToken("", 0, 1, 1, fmt.Sprintf("%g", num.Value()), lex.Number)
+		return ast.NewNumberNode(tok), nil
+
+	case mem.TypeString:
+		str := obj.(*mem.String)
+		// Create a token for the string (with quotes)
+		tok := lex.NewToken("", 0, 1, 1, fmt.Sprintf("%q", str.Value()), lex.String)
+		return ast.NewStringNode(tok), nil
+
+	case mem.TypeSymbol:
+		sym := obj.(*mem.Symbol)
+		name := sym.Name()
+		// Create a token for the symbol
+		tok := lex.NewToken("", 0, 1, 1, name, lex.Atom)
+		return ast.NewSymbolNode(tok), nil
+
+	case mem.TypeNil:
+		// Empty list -> ListNode with no elements
+		tok := lex.NewToken("", 0, 1, 1, "()", lex.ParenOpen)
+		return ast.NewListNode(tok, nil), nil
+
+	case mem.TypePair:
+		// Convert list to AST
+		elements, err := mem.ListToSlice(obj)
+		if err != nil {
+			return nil, mem.NewRuntimeError(fmt.Sprintf("eval: cannot convert to list: %v", err))
+		}
+
+		if len(elements) == 0 {
+			tok := lex.NewToken("", 0, 1, 1, "()", lex.ParenOpen)
+			return ast.NewListNode(tok, nil), nil
+		}
+
+		// Convert elements to AST nodes
+		astElements := make([]ast.Node, len(elements))
+		for i, elem := range elements {
+			astElem, err := e.objectToAST(elem)
+			if err != nil {
+				return nil, err
+			}
+			astElements[i] = astElem
+		}
+
+		// If first element is a symbol, treat as CallNode
+		if firstSym, ok := astElements[0].(*ast.SymbolNode); ok {
+			return ast.NewCallNode(firstSym, astElements[1:]), nil
+		}
+
+		// Otherwise, treat as ListNode
+		tok := lex.NewToken("", 0, 1, 1, "(", lex.ParenOpen)
+		return ast.NewListNode(tok, astElements), nil
+
+	default:
+		return nil, mem.NewRuntimeError(fmt.Sprintf("eval: cannot convert %s to AST", obj.Type()))
+	}
+}
+
+// registerEvalPrimitives registers eval, apply, and load primitives with evaluator access.
+func (e *evaluator) registerEvalPrimitives() error {
+	// Register eval primitive
+	evalDefs := builtin.EvalDefinitions(func(obj mem.Object) (mem.Object, error) {
+		// Convert object to AST
+		astNode, err := e.objectToAST(obj)
+		if err != nil {
+			return nil, err
+		}
+		// Evaluate the AST node
+		return e.EvalOne(astNode)
+	})
+	if err := e.state.LoadDefinitions(evalDefs); err != nil {
+		return fmt.Errorf("failed to register eval: %w", err)
+	}
+
+	// Register apply primitive
+	applyDefs := builtin.ApplyDefinitions(func(proc *mem.Procedure, args []mem.Object) (mem.Object, error) {
+		return e.apply(proc, args)
+	})
+	if err := e.state.LoadDefinitions(applyDefs); err != nil {
+		return fmt.Errorf("failed to register apply: %w", err)
+	}
+
+	// Register load primitive
+	loadDefs := builtin.LoadDefinitions(func(source string) (mem.Object, error) {
+		// Tokenize
+		lexer := lex.New()
+		tokens, err := lexer.Tokenize(source)
+		if err != nil {
+			return nil, fmt.Errorf("load: lexer error: %w", err)
+		}
+
+		// Parse
+		parser := ast.New()
+		nodes, err := parser.Parse(tokens)
+		if err != nil {
+			return nil, fmt.Errorf("load: parser error: %w", err)
+		}
+
+		// Evaluate
+		return e.Eval(nodes)
+	})
+	if err := e.state.LoadDefinitions(loadDefs); err != nil {
+		return fmt.Errorf("failed to register load: %w", err)
+	}
+
+	return nil
+}
+
+// loadFunctionalLibrary loads the functional.scm file containing map, filter, fold.
+func (e *evaluator) loadFunctionalLibrary() error {
+	// Try multiple paths to find functional.scm
+	paths := []string{
+		filepath.Join("core", "builtin", "functional.scm"),
+		"functional.scm",
+		filepath.Join("..", "core", "builtin", "functional.scm"),
+		filepath.Join(".", "core", "builtin", "functional.scm"),
+	}
+
+	var content []byte
+	var err error
+	var found bool
+
+	for _, path := range paths {
+		content, err = os.ReadFile(path)
+		if err == nil {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// If not found, it's not critical - map, filter, fold just won't be available
+		// Return nil to allow evaluator to work without them
+		return nil
+	}
+
+	// Tokenize, parse, and evaluate
+	lexer := lex.New()
+	tokens, err := lexer.Tokenize(string(content))
+	if err != nil {
+		return fmt.Errorf("failed to tokenize functional.scm: %w", err)
+	}
+
+	parser := ast.New()
+	nodes, err := parser.Parse(tokens)
+	if err != nil {
+		return fmt.Errorf("failed to parse functional.scm: %w", err)
+	}
+
+	_, err = e.Eval(nodes)
+	if err != nil {
+		return fmt.Errorf("failed to evaluate functional.scm: %w", err)
+	}
+
+	return nil
 }
